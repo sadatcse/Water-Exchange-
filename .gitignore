@@ -20,7 +20,9 @@ npm-debug.log*
 
 # cPanel package (npm run build:cpanel)
 /cpanel-build
-/water-exchange-cpanel.zip
+/water-exchange-cpanel.tar.gz
+/cpanel-npm-build
+/water-exchange-cpanel-npm.tar.gz
 
 # Images uploaded from the dashboard (stored on the server, see media.service.js)
 /uploads
