@@ -1,5 +1,4 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   FaSignInAlt, FaExclamationTriangle, FaUserCheck, FaDatabase, FaHistory, FaPlusCircle, FaTrashAlt, FaUsers,
@@ -7,6 +6,7 @@ import {
 } from 'react-icons/fa';
 import useApi from '@/hooks/useApi';
 import usePagination from '@/hooks/usePagination';
+import useFilters from '@/hooks/useFilters';
 import { formatDate } from '@/lib/utils';
 import PageTitle from '@/components/dashboard/PageTitle';
 import StatCard, { StatGrid } from '@/components/dashboard/StatCard';
@@ -35,19 +35,6 @@ function timeAgo(date) {
   const [secs, unit] = s < 3600 ? units[0] : s < 86400 ? units[1] : units[2];
   const n = Math.floor(s / secs);
   return `${n} ${unit}${n > 1 ? 's' : ''} ago`;
-}
-
-// Filters → query string, with the search box debounced so typing doesn't fetch on every key
-function useFilters(initial) {
-  const [filters, setFilters] = useState(initial);
-  const [search, setSearch] = useState(initial.search || '');
-  useEffect(() => {
-    const id = setTimeout(() => setFilters((f) => (f.search === search ? f : { ...f, search })), 350);
-    return () => clearTimeout(id);
-  }, [search]);
-  const query = useMemo(() => new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString(), [filters]);
-  const set = (key) => (value) => setFilters((f) => ({ ...f, [key]: value }));
-  return { filters, set, search, setSearch, query };
 }
 
 function UserCell({ row }) {

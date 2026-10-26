@@ -67,7 +67,7 @@ export default function Navbar() {
         )}
       >
         <Container className={cn('flex max-w-7xl items-center justify-between gap-4 transition-all duration-300', scrolled ? 'h-16' : 'h-20')}>
-          <Logo height={scrolled ? 48 : 58} className="transition-all duration-300" />
+          <Logo fx height={scrolled ? 48 : 58} className="transition-all duration-300" />
 
           <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Main">
             {mainNav.map((link) => {

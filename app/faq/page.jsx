@@ -6,16 +6,21 @@ import Container from '@/components/ui/Container';
 import Reveal from '@/components/site/Reveal';
 import Faq from '@/components/site/Faq';
 import CtaBand, { telHref } from '@/components/site/CtaBand';
+import { pageMetadata, faqJsonLd } from '@/lib/seo';
+import JsonLd from '@/components/seo/JsonLd';
 
-export const metadata = {
-  title: 'FAQ',
-  description: `Answers about DOE renewal, water testing, ETP / STP / WTP, EIA / IEE / ECC and captive power plant clearance from ${siteConfig.name}.`,
-};
+export const generateMetadata = () =>
+  pageMetadata({
+    title: 'FAQ',
+    description: `Answers about DOE renewal, water testing, ETP / STP / WTP, EIA / IEE / ECC and captive power plant clearance from ${siteConfig.name}.`,
+    path: '/faq',
+  });
 
 export default function FaqPage() {
   const phone = siteConfig.contact.phones[0];
   return (
     <div className="bg-canvas">
+      <JsonLd data={faqJsonLd(faqGroups.flatMap((g) => g.items))} />
       <DarkPageHeader
         title="Frequently asked"
         accent="questions"

@@ -1,16 +1,20 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { FaClock, FaPalette, FaLock } from 'react-icons/fa';
+import { FaClock, FaPalette, FaLock, FaSlidersH, FaSearch, FaEnvelope } from 'react-icons/fa';
+import { useRouter, useSearchParams } from 'next/navigation';
 import useApi from '@/hooks/useApi';
 import { apiSecure, apiError } from '@/lib/api-client';
 import { DEFAULT_TIME_ZONE, offsetLabel, setTimeZone } from '@/lib/timezone';
 import PageTitle from '@/components/dashboard/PageTitle';
 import ThemeToggle from '@/components/layout/ThemeToggle';
-import Card from '@/components/ui/Card';
+import SettingsSection from '@/components/dashboard/SettingsSection';
 import Button from '@/components/ui/Button';
 import Alert from '@/components/ui/Alert';
 import { Input } from '@/components/forms/FormField';
 import { FormSkeleton } from '@/components/loading/PageSkeletons';
+import SeoSettings from '@/views/dashboard/settings/SeoSettings';
+import EmailSettings from '@/views/dashboard/settings/EmailSettings';
+import { cn } from '@/lib/utils';
 
 const PINNED_ZONES = ['Asia/Dhaka', 'Asia/Kolkata', 'Asia/Dubai', 'Asia/Singapore', 'Europe/London', 'America/New_York', 'UTC'];
 
@@ -32,22 +36,6 @@ function useClock(timeZone) {
     return () => clearInterval(id);
   }, [timeZone]);
   return now;
-}
-
-function Section({ icon: Icon, title, description, children, footer }) {
-  return (
-    <Card className="p-0">
-      <div className="flex items-start gap-3 border-b border-line/10 px-5 py-4">
-        <span className="rounded-lg bg-primary-50 p-2.5 text-primary-600 dark:bg-primary-500/15 dark:text-primary-300"><Icon /></span>
-        <div>
-          <h2 className="text-base">{title}</h2>
-          {description && <p className="mt-0.5 text-sm text-subtle">{description}</p>}
-        </div>
-      </div>
-      <div className="px-5 py-5">{children}</div>
-      {footer && <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line/10 px-5 py-3">{footer}</div>}
-    </Card>
-  );
 }
 
 function TimezoneSettings() {
@@ -76,7 +64,7 @@ function TimezoneSettings() {
   };
 
   return (
-    <Section
+    <SettingsSection
       icon={FaClock}
       title="Timezone"
       description="Used for every date and time on the site and dashboard."
@@ -110,7 +98,7 @@ function TimezoneSettings() {
           </div>
         </>
       )}
-    </Section>
+    </SettingsSection>
   );
 }
 
@@ -142,7 +130,7 @@ function PasswordSettings() {
   };
 
   return (
-    <Section icon={FaLock} title="Password" description="Change the password you use to sign in.">
+    <SettingsSection icon={FaLock} title="Password" description="Change the password you use to sign in.">
       <form onSubmit={save} className="space-y-4">
         <Input label="Current password" name="currentPassword" type="password" autoComplete="current-password" value={form.currentPassword} onChange={update} required />
         <div className="grid gap-4 sm:grid-cols-2">
@@ -154,22 +142,58 @@ function PasswordSettings() {
           <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Update password'}</Button>
         </div>
       </form>
-    </Section>
+    </SettingsSection>
   );
 }
 
+const TABS = [
+  { id: 'general', label: 'General', icon: FaSlidersH },
+  { id: 'seo', label: 'SEO', icon: FaSearch },
+  { id: 'email', label: 'Email & reports', icon: FaEnvelope },
+];
+
+function GeneralSettings() {
+  return (
+    <div className="grid gap-6 xl:grid-cols-2">
+      <TimezoneSettings />
+      <PasswordSettings />
+      <SettingsSection icon={FaPalette} title="Appearance" description="Light, dark or follow the device. Saved in this browser for each visitor.">
+        <ThemeToggle variant="row" />
+        <p className="mt-3 text-xs text-subtle">Visitors switch the theme with the sun / moon button in the site header.</p>
+      </SettingsSection>
+    </div>
+  );
+}
+
+// Tabs are kept in ?tab= so a section can be linked to directly
 export default function SettingsView() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const tab = TABS.some((t) => t.id === params.get('tab')) ? params.get('tab') : 'general';
+
   return (
     <>
       <PageTitle title="Settings" description="Site-wide options for the website and dashboard." />
-      <div className="grid gap-6 xl:grid-cols-2">
-        <TimezoneSettings />
-        <PasswordSettings />
-        <Section icon={FaPalette} title="Appearance" description="Light, dark or follow the device. Saved in this browser for each visitor.">
-          <ThemeToggle variant="row" />
-          <p className="mt-3 text-xs text-subtle">Visitors switch the theme with the sun / moon button in the site header.</p>
-        </Section>
+      <div role="tablist" aria-label="Settings sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-line/10">
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => router.replace(id === 'general' ? '/dashboard/settings' : `/dashboard/settings?tab=${id}`, { scroll: false })}
+            className={cn(
+              '-mb-px flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors',
+              tab === id ? 'border-primary-600 text-primary-700 dark:text-primary-300' : 'border-transparent text-muted hover:text-ink'
+            )}
+          >
+            <Icon aria-hidden /> {label}
+          </button>
+        ))}
       </div>
+      {tab === 'general' && <GeneralSettings />}
+      {tab === 'seo' && <SeoSettings />}
+      {tab === 'email' && <EmailSettings />}
     </>
   );
 }

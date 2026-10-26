@@ -82,6 +82,50 @@
   }
 }
 
+/* Navbar logo: a glint sweeps across the logo every few seconds; hover lifts it with a soft glow.
+   The glint is masked to the logo's own shape so it only catches the strokes. */
+.logo-fx { position: relative; isolation: isolate; }
+.logo-fx::before {
+  content: '';
+  position: absolute;
+  inset: -20% -12%;
+  z-index: -1;
+  border-radius: 9999px;
+  background: radial-gradient(closest-side, rgb(34 211 238 / 0.32), transparent);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.4s ease, transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.logo-fx .logo-img { transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.5s ease; }
+.logo-fx:hover::before, .logo-fx:focus-visible::before { opacity: 1; transform: scale(1); }
+.logo-fx:hover .logo-img, .logo-fx:focus-visible .logo-img {
+  transform: translateY(-2px) scale(1.06) rotate(-1.5deg);
+  filter: drop-shadow(0 6px 14px rgb(14 165 233 / 0.35));
+}
+.logo-shine {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask: url('/brand/wx-primary.svg') center / contain no-repeat;
+  mask: url('/brand/wx-primary.svg') center / contain no-repeat;
+}
+.logo-shine::after {
+  content: '';
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: -60%;
+  width: 40%;
+  background: linear-gradient(100deg, transparent, rgb(255 255 255 / 0.95), transparent);
+  transform: skewX(-20deg);
+  animation: logo-shine 6s ease-in-out 1.5s infinite;
+}
+@keyframes logo-shine {
+  0%, 72% { left: -60%; }
+  100% { left: 130%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -90,4 +134,6 @@
     scroll-behavior: auto !important;
   }
   .reveal { opacity: 1; transform: none; }
+  .logo-shine { display: none; }
+  .logo-fx:hover .logo-img { transform: none; }
 }

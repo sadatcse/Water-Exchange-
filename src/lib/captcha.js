@@ -1,4 +1,4 @@
-// Math captcha for /login (server-only). Stateless: the answer is never sent to the browser — the token
+// Math captcha for /admin (sign-in) (server-only). Stateless: the answer is never sent to the browser — the token
 // carries an HMAC of answer + expiry + nonce. Each token works once (nonces are remembered until they expire).
 import crypto from 'node:crypto';
 

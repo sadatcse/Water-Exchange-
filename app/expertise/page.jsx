@@ -9,11 +9,14 @@ import SectionHeading from '@/components/site/SectionHeading';
 import Bubbles from '@/components/site/Bubbles';
 import TiltCard from '@/components/site/TiltCard';
 import CtaBand from '@/components/site/CtaBand';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata = {
-  title: 'Expertise',
-  description: `Environmental assessment, waste management, water & sanitation, research and GIS expertise at ${siteConfig.name}.`,
-};
+export const generateMetadata = () =>
+  pageMetadata({
+    title: 'Expertise',
+    description: `Environmental assessment, waste management, water & sanitation, research and GIS expertise at ${siteConfig.name}.`,
+    path: '/expertise',
+  });
 
 export default function ExpertisePage() {
   return (

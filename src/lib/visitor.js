@@ -21,9 +21,12 @@ export function detectSource(referrer) {
   }
 }
 
+// Real visitor IP behind a proxy: Vercel / nginx / Apache (cPanel) set x-forwarded-for or x-real-ip,
+// Cloudflare sets cf-connecting-ip
 export function getClientIp(req) {
   const forwarded = req.headers.get('x-forwarded-for');
-  return forwarded ? forwarded.split(',')[0].trim() : 'Unknown';
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || 'Unknown';
 }
 
 export async function resolveCountry(req, ip) {

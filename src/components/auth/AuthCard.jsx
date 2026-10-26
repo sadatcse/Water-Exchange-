@@ -1,7 +1,7 @@
 import Logo from '@/components/layout/Logo';
 import ThemeToggle from '@/components/layout/ThemeToggle';
 
-// Centred card used by /login (follows the light / dark theme)
+// Centred card used by /admin (sign-in) (follows the light / dark theme)
 export default function AuthCard({ title, subtitle, children, footer }) {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas px-4 py-12">

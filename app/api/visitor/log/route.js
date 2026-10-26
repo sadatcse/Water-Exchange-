@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import VisitorLog from '@/models/VisitorLog';
 import { detectSource, getClientIp, resolveCountry } from '@/lib/visitor';
+import { parseUserAgent } from '@/lib/user-agent';
 
 // Public: records one visit per browser session (called from AppShell)
 export async function POST(req) {
@@ -20,6 +21,7 @@ export async function POST(req) {
       sourceName,
       path: String(path).slice(0, 300),
       userAgent: String(userAgent).slice(0, 500),
+      ...parseUserAgent(String(userAgent)),
     });
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error) {

@@ -17,3 +17,10 @@ npm-debug.log*
 
 # vercel
 .vercel
+
+# cPanel package (npm run build:cpanel)
+/cpanel-build
+/water-exchange-cpanel.zip
+
+# Images uploaded from the dashboard (stored on the server, see media.service.js)
+/uploads

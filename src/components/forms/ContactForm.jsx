@@ -10,11 +10,11 @@ import { Input, Textarea } from './FormField';
 const EMPTY = { fullName: '', email: '', phone: '', subject: '', message: '' };
 const MAX_MESSAGE = 5000; // same limit as POST /api/contact
 // One tap fills the subject
-const TOPICS = ['ETP design & installation', 'STP design & installation', 'WTP design & installation', 'DOE water test & clearance', 'General question'];
+const TOPICS = ['ETP design & installation', 'STP design & installation', 'WTP design & installation', 'DOE water test & clearance', 'Product quotation', 'General question'];
 
 // Saves to /api/contact → listed under "Latest messages" on the dashboard overview.
-export default function ContactForm() {
-  const [form, setForm] = useState(EMPTY);
+export default function ContactForm({ defaultSubject = '' }) {
+  const [form, setForm] = useState({ ...EMPTY, subject: defaultSubject });
   const [error, setError] = useState('');
   const [sent, setSent] = useState(null); // success message once sent
   const [submitting, setSubmitting] = useState(false);

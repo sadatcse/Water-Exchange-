@@ -52,6 +52,7 @@ const config = {
         marquee: { from: { transform: 'translateX(0)' }, to: { transform: 'translateX(-50%)' } },
         'spin-slow': { to: { transform: 'rotate(360deg)' } },
         flow: { to: { strokeDashoffset: '-40' } },
+        'fade-up': { from: { opacity: '0', transform: 'translateY(12px)' }, to: { opacity: '1', transform: 'none' } },
       },
       animation: {
         float: 'float 6s ease-in-out infinite',
@@ -61,6 +62,7 @@ const config = {
         marquee: 'marquee 32s linear infinite',
         'spin-slow': 'spin-slow 40s linear infinite',
         flow: 'flow 1.2s linear infinite',
+        'fade-up': 'fade-up 0.5s ease-out both',
       },
     },
   },

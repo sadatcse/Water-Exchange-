@@ -16,7 +16,7 @@ export default function DashboardShell({ children }) {
 
   // The proxy already blocks visitors; this covers a session that expired while the page was open.
   useEffect(() => {
-    if (!loading && (!user || user.role !== 'admin')) router.replace('/login');
+    if (!loading && (!user || user.role !== 'admin')) router.replace('/admin');
   }, [loading, user, router]);
 
   if (loading || !user || user.role !== 'admin') {

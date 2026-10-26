@@ -1,13 +1,21 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import connectDB from '@/lib/db';
 import ContactMessage from '@/models/ContactMessage';
 import { findRecentDuplicate } from '@/lib/dedupe-guard';
 import { getClientIp } from '@/lib/visitor';
 import { isRateLimited } from '@/lib/rate-limit';
+import { route } from '@/server/http';
+import * as content from '@/server/controllers/content.controller';
+import { notifyNewContact } from '@/server/services/notify.service';
+
+export const dynamic = 'force-dynamic';
+
+// Admin: list messages (Dashboard → Messages)
+export const GET = route(content.listMessages, { roles: ['admin'] });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Public: submit the contact form (messages are listed on the dashboard overview)
+// Public: submit the contact form (messages appear in Dashboard → Messages)
 export async function POST(req) {
   try {
     if (isRateLimited(`contact:${getClientIp(req)}`, { limit: 5, windowMs: 60 * 60 * 1000 })) {
@@ -32,7 +40,9 @@ export async function POST(req) {
       return NextResponse.json({ success: true, message: 'We already received your message — we will get back to you soon.' });
     }
 
-    await ContactMessage.create(data);
+    const message = await ContactMessage.create(data);
+    // Email the admin once the visitor has their response
+    after(() => notifyNewContact(message.toObject()));
     return NextResponse.json({ success: true, message: 'Thanks! Your message has been sent.' }, { status: 201 });
   } catch (error) {
     console.error('Contact POST error:', error);

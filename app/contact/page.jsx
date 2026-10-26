@@ -2,17 +2,21 @@ import Link from 'next/link';
 import { Fragment } from 'react';
 import { FaEnvelope, FaPhoneAlt, FaMapMarkerAlt, FaChevronRight, FaArrowRight } from 'react-icons/fa';
 import { siteConfig } from '@/config/site';
+import { getProductBySlug } from '@/server/services/product.service';
 import Container from '@/components/ui/Container';
 import ContactForm from '@/components/forms/ContactForm';
 import ContactHeroSlider from '@/components/site/ContactHeroSlider';
 import Bubbles from '@/components/site/Bubbles';
 import WaterWaves from '@/components/site/WaterWaves';
 import Reveal from '@/components/site/Reveal';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata = {
-  title: 'Contact Us',
-  description: `Get in touch with ${siteConfig.name} — ETP, STP, WTP design and installation, DOE water testing and clearance. Call ${siteConfig.contact.phones[0]}.`,
-};
+export const generateMetadata = () =>
+  pageMetadata({
+    title: 'Contact Us',
+    description: `Get in touch with ${siteConfig.name} — ETP, STP, WTP design and installation, DOE water testing and clearance. Call ${siteConfig.contact.phones[0]}.`,
+    path: '/contact',
+  });
 
 const telHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`;
 
@@ -30,8 +34,10 @@ function InfoCard({ icon: Icon, title, children, delay }) {
   );
 }
 
-export default function ContactPage() {
+export default async function ContactPage({ searchParams }) {
   const { contact } = siteConfig;
+  // "Request a quotation" on a product page links here with ?product=<slug>
+  const quoteFor = await getProductBySlug((await searchParams).product);
   const phone = contact.phones[0];
 
   const slides = [
@@ -148,7 +154,7 @@ export default function ContactPage() {
             </h2>
             <p className="mt-2 text-sm text-muted">Pick a topic, add a few details and we’ll get back to you.</p>
             <div className="mt-8">
-              <ContactForm />
+              <ContactForm defaultSubject={quoteFor ? `Quotation: ${quoteFor.name}` : ''} />
             </div>
           </Reveal>
 

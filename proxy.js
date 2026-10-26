@@ -16,7 +16,7 @@ function readSession(token) {
 }
 
 function redirectToLogin(request, pathname, hadToken) {
-  const loginUrl = new URL('/login', request.url);
+  const loginUrl = new URL('/admin', request.url);
   loginUrl.searchParams.set('from', pathname + request.nextUrl.search);
   const response = NextResponse.redirect(loginUrl);
   if (hadToken) response.cookies.delete('token');
@@ -59,7 +59,7 @@ export function proxy(request) {
   }
 
   // 3. Signed-in admins skip the login page
-  if (pathname === '/login' && session?.role === 'admin') {
+  if (pathname === '/admin' && session?.role === 'admin') {
     const target = safeRedirect(request.nextUrl.searchParams.get('from'), session.role, '/dashboard');
     return NextResponse.redirect(new URL(target, request.url));
   }
@@ -68,5 +68,5 @@ export function proxy(request) {
 }
 
 export const config = {
-  matcher: ['/api/:path*', '/dashboard/:path*', '/login'],
+  matcher: ['/api/:path*', '/dashboard/:path*', '/admin'],
 };

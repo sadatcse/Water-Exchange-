@@ -1,6 +1,8 @@
 'use client';
 import Link from 'next/link';
-import { FaUsers, FaCalendarDay, FaEnvelope, FaEnvelopeOpen, FaUserShield, FaGlobe, FaSignInAlt, FaHistory, FaCog } from 'react-icons/fa';
+import {
+  FaUsers, FaCalendarDay, FaEnvelope, FaEnvelopeOpen, FaGlobe, FaSignInAlt, FaHistory, FaCog, FaBoxOpen, FaNewspaper, FaUserFriends, FaPlus,
+} from 'react-icons/fa';
 import useApi from '@/hooks/useApi';
 import useAuth from '@/hooks/useAuth';
 import { formatDate } from '@/lib/utils';
@@ -11,6 +13,9 @@ import Button from '@/components/ui/Button';
 import EmptyState from '@/components/ui/EmptyState';
 
 const QUICK_LINKS = [
+  { href: '/dashboard/messages', label: 'Read contact requests', icon: FaEnvelope },
+  { href: '/dashboard/blog/new', label: 'Write a blog post', icon: FaPlus },
+  { href: '/dashboard/products/new', label: 'Add a product', icon: FaBoxOpen },
   { href: '/dashboard/traffic', label: 'See who is visiting the site', icon: FaGlobe },
   { href: '/dashboard/login-history', label: 'Check recent sign-ins', icon: FaSignInAlt },
   { href: '/dashboard/activity', label: 'Review user activity', icon: FaHistory },
@@ -31,7 +36,12 @@ export default function DashboardHome() {
         <StatCard label="Total visitors" value={visitors.data?.total} icon={FaUsers} loading={visitors.loading} />
         <StatCard label="Visitors today" value={visitors.data?.today} icon={FaCalendarDay} tone="green" loading={visitors.loading} />
         <StatCard label="Contact messages" value={s?.messages} hint={s ? `${s.unreadMessages} unread` : undefined} icon={FaEnvelope} tone="amber" loading={stats.loading} />
-        <StatCard label="Admin accounts" value={s?.users} icon={FaUserShield} tone="red" loading={stats.loading} />
+        <StatCard label="Admin accounts" value={s?.users} icon={FaUsers} tone="red" loading={stats.loading} />
+      </StatGrid>
+      <StatGrid cols={3}>
+        <StatCard label="Published products" value={s?.products} icon={FaBoxOpen} tone="gray" loading={stats.loading} />
+        <StatCard label="Published blog posts" value={s?.posts} icon={FaNewspaper} tone="gray" loading={stats.loading} />
+        <StatCard label="Team members" value={s?.team} icon={FaUserFriends} tone="gray" loading={stats.loading} />
       </StatGrid>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -46,7 +56,7 @@ export default function DashboardHome() {
             ))}
           </ul>
         </Card>
-        <Card title="Latest messages" action={<Button href="/contact" variant="ghost" size="sm">Contact page</Button>}>
+        <Card title="Latest messages" action={<Button href="/dashboard/messages" variant="ghost" size="sm">All messages</Button>}>
           {s?.recentMessages?.length ? (
             <ul className="divide-y divide-line/5">
               {s.recentMessages.map((m) => (

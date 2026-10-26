@@ -43,7 +43,7 @@ function ContactRow({ icon: Icon, children }) {
   );
 }
 
-export default function Footer() {
+export default function Footer({ social = siteConfig.social }) {
   const [visitors, setVisitors] = useState(null);
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export default function Footer() {
   }, []);
 
   const { contact } = siteConfig;
-  const socials = Object.entries(siteConfig.social).filter(([key, url]) => url && SOCIAL_ICONS[key]);
+  const socials = Object.entries(social).filter(([key, url]) => url && SOCIAL_ICONS[key]);
   const serviceLinks = keyServices.map((s) => ({ label: s.title, href: `/services#${s.id}` }));
 
   return (

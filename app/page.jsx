@@ -3,7 +3,7 @@ import Image from 'next/image';
 import { FaArrowRight, FaCheckCircle, FaPhoneAlt, FaQuoteLeft, FaQuoteRight, FaShieldAlt, FaHardHat } from 'react-icons/fa';
 import { siteConfig } from '@/config/site';
 import {
-  coreServices, keyServices, expertise, whyChooseUs, processSteps, homeFaqs, articles, clients, facts, promises,
+  coreServices, keyServices, expertise, whyChooseUs, processSteps, homeFaqs, facts, promises,
   mission, vision, ceoMessage, projects,
 } from '@/data/company';
 import Container from '@/components/ui/Container';
@@ -18,6 +18,12 @@ import CountUp from '@/components/site/CountUp';
 import PosterGallery from '@/components/site/PosterGallery';
 import TeamGrid from '@/components/site/TeamGrid';
 import Faq from '@/components/site/Faq';
+import ProductSlider from '@/components/site/ProductSlider';
+import BlogCard from '@/components/site/BlogCard';
+import { listProducts } from '@/server/services/product.service';
+import { listTeam } from '@/server/services/team.service';
+import { latestPosts } from '@/server/services/blog.service';
+import { listClients } from '@/server/services/client.service';
 import CtaBand, { telHref } from '@/components/site/CtaBand';
 
 // Hero visual: the journey from raw water to DOE clearance
@@ -52,7 +58,7 @@ function FlowCard() {
       </div>
       {/* Floating badges */}
       <div className="absolute -right-3 -top-12 animate-float rounded-2xl bg-white px-4 py-3 text-sky-900 shadow-xl sm:-top-5 md:-right-8" style={{ transform: 'translateZ(60px)' }}>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-sky-600">100+ projects</p>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-sky-600">300+ projects</p>
         <p className="text-sm font-extrabold">Stress-Free Guarantee</p>
       </div>
       <div className="absolute -bottom-6 -left-3 animate-float rounded-2xl bg-gradient-to-r from-sky-600 to-cyan-500 px-4 py-3 text-white shadow-xl [animation-delay:1.5s] md:-left-8">
@@ -63,8 +69,9 @@ function FlowCard() {
   );
 }
 
-export default function HomePage() {
+export default async function HomePage() {
   const phone = siteConfig.contact.phones[0];
+  const [products, team, posts, clients] = await Promise.all([listProducts(), listTeam(), latestPosts(3), listClients()]);
   return (
     <div className="bg-canvas text-body">
       {/* Hero */}
@@ -119,8 +126,8 @@ export default function HomePage() {
 
       {/* Clients & partners */}
       <section className="relative z-10 -mt-6 space-y-4 pb-4">
-        <p className="text-center text-xs font-bold uppercase tracking-[0.2em] text-subtle">Trusted by 100+ companies and hospitals</p>
-        <LogoMarquee items={clients} label="Clients" />
+        <p className="text-center text-xs font-bold uppercase tracking-[0.2em] text-subtle">Trusted by 200+ companies and hospitals</p>
+        {clients.length > 0 && <LogoMarquee items={clients} label="Clients" />}
       </section>
 
       {/* Interesting facts */}
@@ -201,6 +208,29 @@ export default function HomePage() {
         </Container>
       </section>
 
+      {/* Products */}
+      <section className="bg-canvas-2 py-16 md:py-24">
+        <Container className="max-w-7xl">
+          <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
+            <SectionHeading
+              align="left"
+              eyebrow="Products & machinery"
+              title="Equipment for every"
+              accent="treatment stage"
+              subtitle="Blowers, diffusers, pumps, dosing systems and meters from proven brands — sized by our engineers, installed by our team."
+            />
+            <Reveal>
+              <Button href="/products" variant="brand" className="rounded-full">
+                View all products <FaArrowRight aria-hidden />
+              </Button>
+            </Reveal>
+          </div>
+          <Reveal delay={100} className="mt-10">
+            <ProductSlider products={products} />
+          </Reveal>
+        </Container>
+      </section>
+
       {/* Mission, vision & CEO's message */}
       <section className="bg-canvas-2 py-16 md:py-24">
         <Container className="grid max-w-7xl gap-8 lg:grid-cols-2">
@@ -260,7 +290,8 @@ export default function HomePage() {
               />
               <div className="absolute -bottom-6 -right-4 animate-float rounded-2xl bg-white px-5 py-4 text-sky-900 shadow-xl md:-right-10" style={{ transform: 'translateZ(60px)' }}>
                 <p className="text-3xl font-extrabold">
-                  <CountUp value={100} suffix="+" />
+                  {/* Same figure as "Companies & hospitals consulted" in the facts */}
+                  <CountUp value={facts[1].value} suffix={facts[1].suffix} />
                 </p>
                 <p className="text-xs font-semibold text-sky-700">Companies &amp; hospitals</p>
               </div>
@@ -366,7 +397,7 @@ export default function HomePage() {
         <Container className="max-w-6xl">
           <SectionHeading eyebrow="Meet the team" title="The people behind" accent="your compliance" />
           <div className="mt-12">
-            <TeamGrid />
+            <TeamGrid members={team} />
           </div>
         </Container>
       </section>
@@ -404,22 +435,13 @@ export default function HomePage() {
               </Button>
             </Reveal>
           </div>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {articles.map((a, i) => (
-              <Reveal key={a.title} delay={i * 100}>
-                <article className="group flex h-full flex-col overflow-hidden rounded-3xl border border-line/10 bg-surface transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-                  <div className="relative h-36 overflow-hidden bg-gradient-to-br from-abyss via-sky-800 to-cyan-600">
-                    <Bubbles />
-                    <span className="absolute left-5 top-5 rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white backdrop-blur">{a.category}</span>
-                  </div>
-                  <div className="flex flex-1 flex-col p-6">
-                    <h3 className="text-lg leading-snug">{a.title}</h3>
-                    <p className="mt-3 text-sm leading-relaxed text-muted">{a.excerpt}</p>
-                  </div>
-                </article>
+          <ul className="mt-12 grid gap-6 md:grid-cols-3">
+            {posts.map((post, i) => (
+              <Reveal as="li" key={post.slug} delay={i * 100}>
+                <BlogCard post={post} />
               </Reveal>
             ))}
-          </div>
+          </ul>
         </Container>
       </section>
 

@@ -17,7 +17,7 @@ export default function Sidebar({ onClose }) {
 
   const handleLogout = async () => {
     await logOut().catch(() => {});
-    router.push('/login');
+    router.push('/admin');
   };
 
   return (

@@ -7,7 +7,7 @@ export const siteConfig = {
   slogan: 'Water & Beyond',
   description:
     'A high-end environment consultancy firm in Bangladesh — ETP, STP and WTP design and installation, plus Department of Environment (DOE) water testing and clearance, from start to finish.',
-  url: process.env.NEXT_PUBLIC_SITE_URL || 'https://www.waterexchangebd.com',
+  url: process.env.NEXT_PUBLIC_SITE_URL || 'https://waterexchangebd.com',
   founder: {
     name: 'Engr. Sarnaly Afroz',
     title: 'Founder and Consultant',

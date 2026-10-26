@@ -68,7 +68,17 @@ export async function recordActivity(req, { session, user, action, entity = '', 
 // Turns an API change (method + path + response data) into an activity entry
 const ENTITIES = [
   [/^\/api\/settings\/site/, 'Site settings'],
+  [/^\/api\/settings\/seo/, 'SEO settings'],
+  [/^\/api\/settings\/email/, 'Email settings'],
+  [/^\/api\/reports\/send/, 'Report'],
+  [/^\/api\/email\/test/, 'Test email'],
   [/^\/api\/contact/, 'Contact message'],
+  [/^\/api\/product-categories/, 'Product category'],
+  [/^\/api\/media/, 'Image'],
+  [/^\/api\/products/, 'Product'],
+  [/^\/api\/blog/, 'Blog post'],
+  [/^\/api\/team/, 'Team member'],
+  [/^\/api\/clients/, 'Client'],
 ];
 const VERBS = { create: 'Created', update: 'Updated', delete: 'Deleted' };
 

@@ -7,11 +7,14 @@ import Button from '@/components/ui/Button';
 import Reveal from '@/components/site/Reveal';
 import SectionHeading from '@/components/site/SectionHeading';
 import CtaBand from '@/components/site/CtaBand';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata = {
-  title: 'Services',
-  description: `ETP, STP and WTP design and installation, DOE water testing and clearance, plus waste management, research and environmental consultancy by ${siteConfig.name}.`,
-};
+export const generateMetadata = () =>
+  pageMetadata({
+    title: 'Services',
+    description: `ETP, STP and WTP design and installation, DOE water testing and clearance, plus waste management, research and environmental consultancy by ${siteConfig.name}.`,
+    path: '/services',
+  });
 
 export default function ServicesPage() {
   return (

@@ -6,7 +6,7 @@ export const AuthContext = createContext(null);
 
 const errorMessage = (err, fallback) => err?.response?.data?.message || fallback;
 
-// Session for /login and /dashboard. user = { _id, name, email, role, status, … }
+// Session for /admin and /dashboard. user = { _id, name, email, role, status, … }
 export default function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -31,7 +31,7 @@ export default function AuthProvider({ children }) {
     refresh().finally(() => setLoading(false));
   }, [refresh]);
 
-  // Returns { user, redirectTo }. captcha = { captchaToken, captchaAnswer } from the math question on /login
+  // Returns { user, redirectTo }. captcha = { captchaToken, captchaAnswer } from the math question on /admin
   const signIn = useCallback(async (email, password, captcha = {}) => {
     try {
       const res = await api.post('/auth/sign-in', { email, password, ...captcha }, { withCredentials: true });

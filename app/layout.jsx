@@ -4,24 +4,37 @@ import AppShell from '@/components/layout/AppShell';
 import { siteConfig } from '@/config/site';
 import { getCachedSetting } from '@/server/services/settings.service';
 import { DEFAULT_TIME_ZONE, setTimeZone } from '@/lib/timezone';
+import { seoSettings, organizationJsonLd, websiteJsonLd } from '@/lib/seo';
+import JsonLd from '@/components/seo/JsonLd';
 
-export const metadata = {
-  metadataBase: new URL(siteConfig.url),
-  // Home page: "Water Exchange — Water & Beyond"; other pages: "Page | Water Exchange"
-  title: {
-    default: `${siteConfig.name} — ${siteConfig.slogan}`,
-    template: `%s | ${siteConfig.shortName}`,
-  },
-  description: siteConfig.description,
-  openGraph: {
-    title: `${siteConfig.name} — ${siteConfig.slogan}`,
-    description: siteConfig.description,
-    url: siteConfig.url,
-    siteName: siteConfig.name,
-    locale: 'en_US',
-    type: 'website',
-  },
-};
+// Site-wide SEO from Dashboard → Settings → SEO. Pages add their own title, description and canonical URL
+// (src/lib/seo.js → pageMetadata). Home page: the SEO title; other pages: "Page | Water Exchange".
+export async function generateMetadata() {
+  const seo = await seoSettings();
+  const images = [seo.ogImage].filter(Boolean);
+  return {
+    metadataBase: new URL(siteConfig.url),
+    title: { default: seo.title, template: `%s | ${siteConfig.shortName}` },
+    description: seo.description,
+    keywords: seo.keywords,
+    applicationName: siteConfig.name,
+    authors: [{ name: siteConfig.name, url: siteConfig.url }],
+    creator: siteConfig.name,
+    publisher: siteConfig.name,
+    formatDetection: { telephone: true, email: true, address: true },
+    alternates: { canonical: '/' },
+    openGraph: { title: seo.title, description: seo.description, url: '/', siteName: siteConfig.name, locale: 'en_US', type: 'website', images },
+    twitter: { card: 'summary_large_image', title: seo.title, description: seo.description, images, ...(seo.twitter && { site: `@${seo.twitter}` }) },
+    robots: seo.allowIndexing
+      ? { index: true, follow: true, googleBot: { index: true, follow: true, 'max-image-preview': 'large', 'max-snippet': -1 } }
+      : { index: false, follow: false },
+    verification: {
+      ...(seo.googleVerification && { google: seo.googleVerification }),
+      ...(seo.bingVerification && { other: { 'msvalidate.01': seo.bingVerification } }),
+    },
+    category: 'Environmental consultancy',
+  };
+}
 
 const sans = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 // Bangla copy (service line from the business card)
@@ -49,8 +62,9 @@ async function readTimeZone() {
 }
 
 export default async function RootLayout({ children }) {
-  const timeZone = await readTimeZone();
+  const [timeZone, seo] = await Promise.all([readTimeZone(), seoSettings()]);
   setTimeZone(timeZone);
+  const social = { facebook: seo.facebook, linkedin: seo.linkedin, youtube: seo.youtube };
 
   return (
     <html lang="en" className={`${sans.variable} ${bangla.variable}`} suppressHydrationWarning>
@@ -58,7 +72,8 @@ export default async function RootLayout({ children }) {
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body suppressHydrationWarning>
-        <AppShell timeZone={timeZone}>{children}</AppShell>
+        <JsonLd data={[organizationJsonLd(seo), websiteJsonLd()]} />
+        <AppShell timeZone={timeZone} social={social}>{children}</AppShell>
       </body>
     </html>
   );

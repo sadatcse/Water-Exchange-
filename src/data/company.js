@@ -1,4 +1,5 @@
-// Company content shown across the public pages (services, expertise, clients, team, FAQ, blog).
+// Company content shown across the public pages (services, expertise, clients, FAQ).
+// Products, team, client logos and blog posts live in MongoDB and are managed from the dashboard.
 // Contact details and the founder live in src/config/site.js. Images live in public/images.
 import {
   FaIndustry, FaBuilding, FaTint, FaFileSignature, FaTrashAlt, FaRecycle, FaChalkboardTeacher, FaMicrochip,
@@ -158,10 +159,10 @@ export const whyChooseUs = [
 
 // "Interesting facts about us" — value counts up on screen
 export const facts = [
-  { value: 100, suffix: '+', label: 'Projects completed', text: 'A proven track record — 100+ projects isn’t just a number.' },
-  { value: 100, suffix: '+', label: 'Companies & hospitals consulted', text: 'Corporate companies and hospitals trust us with their compliance.' },
-  { value: 20, suffix: '+', label: 'Power plants cleared', text: 'Clearance secured for 20+ gas and diesel generator power plants.' },
-  { value: 2, suffix: '', label: 'DoE-standard water tests', text: 'Included in every yearly EC Certificate renewal we deliver.' },
+  { value: 300, suffix: '+', label: 'Projects completed', text: 'A proven track record — 300+ projects isn’t just a number.' },
+  { value: 200, suffix: '+', label: 'Companies & hospitals consulted', text: 'Corporate companies and hospitals trust us with their compliance.' },
+  { value: 95, suffix: '+', label: 'Power plants cleared', text: 'Clearance secured for 95+ gas and diesel generator power plants.' },
+  { value: 800, suffix: '+', label: 'DoE-standard water tests', text: 'Water tests delivered for ETPs, STPs and yearly EC Certificate renewals.' },
 ];
 
 export const promises = [
@@ -176,27 +177,6 @@ export const processSteps = [
   { icon: FaCertificate, title: 'DOE clearance & renewals', text: 'We prepare the documents, follow the application through and handle every yearly renewal.' },
 ];
 
-export const team = [
-  { name: 'Ariful Islam', role: 'Consultant (ETP & STP)' },
-  { name: 'Humayra Neela', role: 'Sr. Executive' },
-  { name: 'Akram Hossen', role: 'Digital Marketer' },
-  { name: 'MD Sujon', role: 'Junior Officer' },
-];
-
-// Logos in public/images/clients — name: null when the company name isn't known yet
-export const clients = [
-  { name: 'Eurotex Knitwear Limited', logo: '/images/clients/eurotex.webp', sector: 'Garments' },
-  { name: 'Farazy Hospital Ltd.', logo: '/images/clients/farazy-hospital.webp', sector: 'Healthcare' },
-  { name: 'Dishang Sweater Ltd.', logo: '/images/clients/dishang-sweater.webp', sector: 'Garments' },
-  { name: 'Fuji Knitwears Ltd.', logo: '/images/clients/fuji-knitwears.webp', sector: 'Garments' },
-  { name: 'Meditex Industries Ltd.', logo: '/images/clients/meditex.webp', sector: 'Textiles' },
-  { name: 'Fab-con Textile Mills Ltd.', logo: '/images/clients/fab-con.webp', sector: 'Textiles' },
-  { name: 'York Group', logo: '/images/clients/york-group.webp', sector: 'Industry' },
-  { name: 'Petrochem Group', logo: '/images/clients/petrochem.webp', sector: 'Industry' },
-  { name: 'URO Group', logo: '/images/clients/uro-group.webp', sector: 'Industry' },
-  { name: 'Techno Plastic Solution Pvt. Ltd.', logo: '/images/clients/techno-plastic.webp', sector: 'Plastics' },
-  { name: null, logo: '/images/clients/twp.webp', sector: 'Industry' },
-];
 
 export const partners = [
   { name: 'UNDP', logo: '/images/partners/undp.webp', sector: 'Development partner' },
@@ -224,24 +204,6 @@ export const industries = [
   { icon: FaBriefcaseMedical, title: 'Hospitals & healthcare', text: 'STPs, water testing and environment reports for hospitals.' },
   { icon: FaBolt, title: 'Captive power plants', text: 'Environmental clearance and yearly renewal for gas and diesel generators.' },
   { icon: FaGlobeAsia, title: 'Development partners', text: 'Research, baseline surveys and evaluations for NGOs and international agencies.' },
-];
-
-export const articles = [
-  {
-    title: 'Assessing Plastic Waste Conditions in Cox’s Bazar and Rohingya Camps: A Baseline Survey',
-    category: 'Research',
-    excerpt: 'A waste audit and baseline survey, including the registration of waste workers, to understand plastic waste conditions in Cox’s Bazar and the Rohingya camps.',
-  },
-  {
-    title: 'Experts Gather at BRAC University for Solid Waste Management Seminar 2024',
-    category: 'Events',
-    excerpt: 'The Japan Society of Material Cycles and Waste Management (JSMCWM) hosted the Bangladesh Solid Waste Management Seminar 2024 at BRAC University.',
-  },
-  {
-    title: 'Evaluation of Plastic Waste Management Initiatives of the PLEASE Project',
-    category: 'Evaluation',
-    excerpt: 'An evaluation of the plastic waste management initiatives carried out under the PLEASE Project.',
-  },
 ];
 
 // FAQ grouped by topic (/faq). home: true = also shown on the home page.

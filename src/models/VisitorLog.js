@@ -8,6 +8,10 @@ const VisitorLogSchema = new mongoose.Schema({
   sourceName: { type: String, default: 'Direct' },
   path: { type: String, default: '/' },
   userAgent: { type: String, default: 'Unknown' },
+  // Parsed from the user agent when the visit is logged (older visits may not have them)
+  device: { type: String, default: '' },
+  browser: { type: String, default: '' },
+  os: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now, index: true },
 });
 

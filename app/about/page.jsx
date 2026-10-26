@@ -10,14 +10,19 @@ import TiltCard from '@/components/site/TiltCard';
 import CountUp from '@/components/site/CountUp';
 import Bubbles from '@/components/site/Bubbles';
 import TeamGrid from '@/components/site/TeamGrid';
+import { listTeam } from '@/server/services/team.service';
 import CtaBand from '@/components/site/CtaBand';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata = {
-  title: 'About',
-  description: `Who we are — mission, vision, CEO’s message and team of ${siteConfig.name}, an environment consultancy in Dhaka, Bangladesh.`,
-};
+export const generateMetadata = () =>
+  pageMetadata({
+    title: 'About',
+    description: `Who we are — mission, vision, CEO’s message and team of ${siteConfig.name}, an environment consultancy in Dhaka, Bangladesh.`,
+    path: '/about',
+  });
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const team = await listTeam();
   return (
     <div className="bg-canvas">
       <DarkPageHeader title="About" accent={siteConfig.name} subtitle={siteConfig.description} breadcrumbs={[{ label: 'About' }]} />
@@ -127,7 +132,7 @@ export default function AboutPage() {
         <Container className="max-w-6xl">
           <SectionHeading eyebrow="Meet the team" title="The people behind" accent="your compliance" />
           <div className="mt-12">
-            <TeamGrid />
+            <TeamGrid members={team} />
           </div>
         </Container>
       </section>

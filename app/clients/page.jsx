@@ -1,6 +1,8 @@
 import Image from 'next/image';
 import { siteConfig } from '@/config/site';
-import { clients, partners, industries, projects, facts } from '@/data/company';
+import { partners, industries, projects, facts } from '@/data/company';
+import { listClients } from '@/server/services/client.service';
+import { imageProps } from '@/lib/images';
 import DarkPageHeader from '@/components/ui/DarkPageHeader';
 import Container from '@/components/ui/Container';
 import Reveal from '@/components/site/Reveal';
@@ -9,18 +11,21 @@ import TiltCard from '@/components/site/TiltCard';
 import CountUp from '@/components/site/CountUp';
 import PosterGallery from '@/components/site/PosterGallery';
 import CtaBand from '@/components/site/CtaBand';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata = {
-  title: 'Clients',
-  description: `Factories, hospitals, power plants and development partners served by ${siteConfig.name}.`,
-};
+export const generateMetadata = () =>
+  pageMetadata({
+    title: 'Clients',
+    description: `Factories, hospitals, power plants and development partners served by ${siteConfig.name}.`,
+    path: '/clients',
+  });
 
 function LogoCard({ name, logo, sector }) {
   return (
     <TiltCard max={12} className="h-full">
       <div className="group flex h-full flex-col items-center justify-center rounded-3xl border border-line/10 bg-surface p-5 text-center shadow-sm transition-shadow hover:shadow-2xl hover:shadow-cyan-500/10">
         <div className="flex h-24 w-full items-center justify-center rounded-2xl bg-white p-3">
-          <Image src={logo} alt={name || 'Client logo'} width={180} height={96} className="max-h-full w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
+          <Image src={logo} alt={name || 'Client logo'} {...imageProps(logo)} width={180} height={96} className="max-h-full w-auto object-contain transition-transform duration-300 group-hover:scale-105" />
         </div>
         {name && <h3 className="mt-4 text-sm font-bold">{name}</h3>}
         <p className="mt-0.5 text-xs text-subtle">{sector}</p>
@@ -29,13 +34,14 @@ function LogoCard({ name, logo, sector }) {
   );
 }
 
-export default function ClientsPage() {
+export default async function ClientsPage() {
+  const clients = await listClients();
   return (
     <div className="bg-canvas">
       <DarkPageHeader
         title="Clients"
         accent="Served"
-        subtitle="100+ corporate companies and hospitals — plus leading development partners — trust us with their water, waste and compliance."
+        subtitle="200+ corporate companies and hospitals — plus leading development partners — trust us with their water, waste and compliance."
         breadcrumbs={[{ label: 'Clients' }]}
       />
 
@@ -60,7 +66,7 @@ export default function ClientsPage() {
           <SectionHeading eyebrow="Our happy clients" title="Industry &" accent="healthcare" />
           <div className="mt-12 grid grid-cols-2 gap-4 [perspective:1200px] sm:grid-cols-3 md:gap-6 lg:grid-cols-4">
             {clients.map((c, i) => (
-              <Reveal key={c.logo} delay={(i % 4) * 80}>
+              <Reveal key={c._id} delay={(i % 4) * 80}>
                 <LogoCard {...c} />
               </Reveal>
             ))}

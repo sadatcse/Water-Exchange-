@@ -44,3 +44,15 @@ export function Select({ label, name, error, required, options = [], className, 
     </Field>
   );
 }
+
+export function Checkbox({ label, name, description, className, ...props }) {
+  return (
+    <label htmlFor={name} className={cn('flex cursor-pointer items-start gap-3', className)}>
+      <input id={name} name={name} type="checkbox" className="mt-0.5 h-4 w-4 rounded border-line/30 text-primary-600 focus:ring-primary-500" {...props} />
+      <span>
+        <span className="block text-sm font-medium text-body">{label}</span>
+        {description && <span className="block text-xs text-subtle">{description}</span>}
+      </span>
+    </label>
+  );
+}

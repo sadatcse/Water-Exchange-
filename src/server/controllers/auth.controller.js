@@ -38,7 +38,7 @@ export async function signIn({ req }) {
   return sessionResponse(user);
 }
 
-// GET /api/auth/captcha → { question: '7 + 5', token } for the /login form
+// GET /api/auth/captcha → { question: '7 + 5', token } for the /admin sign-in form
 export async function captcha() {
   const response = ok(createCaptcha());
   response.headers.set('Cache-Control', 'no-store');
