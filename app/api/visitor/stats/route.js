@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
-import connectDB from '@/lib/db';
 import VisitorLog from '@/models/VisitorLog';
 import { requireAdmin, unauthorizedResponse } from '@/lib/auth-guard';
 
 export const dynamic = 'force-dynamic';
 
+const SINCE = '`createdAt` >= ?';
+
 // Admin: full analytics for Dashboard › Traffic Analytics
 export async function GET(req) {
   if (!requireAdmin(req)) return unauthorizedResponse();
   try {
-    await connectDB();
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
@@ -18,19 +18,15 @@ export async function GET(req) {
     const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
 
     const [today, total, online, yesterday, month, year, sourceBreakdown, recent, countries] = await Promise.all([
-      VisitorLog.countDocuments({ createdAt: { $gte: startOfToday } }),
-      VisitorLog.estimatedDocumentCount(),
-      VisitorLog.countDocuments({ createdAt: { $gte: fiveMinutesAgo } }),
-      VisitorLog.countDocuments({ createdAt: { $gte: startOfYesterday, $lt: startOfToday } }),
-      VisitorLog.countDocuments({ createdAt: { $gte: startOfMonth } }),
-      VisitorLog.countDocuments({ createdAt: { $gte: startOfYear } }),
-      VisitorLog.aggregate([{ $group: { _id: '$source', count: { $sum: 1 } } }]),
-      VisitorLog.find().sort({ createdAt: -1 }).limit(300).lean(),
-      VisitorLog.aggregate([
-        { $group: { _id: '$country', count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 8 },
-      ]),
+      VisitorLog.count(SINCE, [startOfToday]),
+      VisitorLog.count(),
+      VisitorLog.count(SINCE, [fiveMinutesAgo]),
+      VisitorLog.count('`createdAt` >= ? AND `createdAt` < ?', [startOfYesterday, startOfToday]),
+      VisitorLog.count(SINCE, [startOfMonth]),
+      VisitorLog.count(SINCE, [startOfYear]),
+      VisitorLog.countBy('source'),
+      VisitorLog.find({ orderBy: { createdAt: -1 }, limit: 300 }),
+      VisitorLog.countBy('country'), // most visits first
     ]);
 
     const countFor = (name) => sourceBreakdown.find((s) => s._id === name)?.count || 0;
@@ -46,7 +42,7 @@ export async function GET(req) {
         year,
         sources: { direct: countFor('Direct'), searchEngine: countFor('Search Engine'), referral: countFor('Referral') },
         recent,
-        countries: countries.map((c) => ({ name: c._id, count: c.count })),
+        countries: countries.slice(0, 8).map((c) => ({ name: c._id, count: c.count })),
       },
     });
   } catch (error) {

@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import connectDB from '@/lib/db';
 import VisitorLog from '@/models/VisitorLog';
 import { detectSource, getClientIp, resolveCountry } from '@/lib/visitor';
 import { parseUserAgent } from '@/lib/user-agent';
@@ -12,8 +11,7 @@ export async function POST(req) {
     const country = await resolveCountry(req, ip);
     const { source, sourceName } = detectSource(referrer);
 
-    await connectDB();
-    await VisitorLog.create({
+    await VisitorLog.insert({
       ip,
       country,
       referrer: String(referrer).slice(0, 500),

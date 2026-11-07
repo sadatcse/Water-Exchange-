@@ -20,9 +20,14 @@ npm-debug.log*
 
 # cPanel package (npm run build:cpanel)
 /cpanel-build
-/water-exchange-cpanel.tar.gz
+
 /cpanel-npm-build
-/water-exchange-cpanel-npm.tar.gz
+
+/cpanel-env-build
+
 
 # Images uploaded from the dashboard (stored on the server, see media.service.js)
 /uploads
+
+# One-time MongoDB → MariaDB export (password hashes and messages — private)
+/mongo-export*.json

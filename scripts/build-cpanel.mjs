@@ -15,6 +15,10 @@
 //   cpanel-npm-build/  app.js, package.json (dependencies only), package-lock.json, .next/, public/,
 //                      next.config.mjs — no .env, the settings go in Setup Node.js App → Environment variables
 //   water-exchange-cpanel-npm.tar.gz
+//
+// npm run build:cpanel-env [-- https://example.com]  → the same, plus a .env with the settings from this
+//   computer's .env (no Environment variables needed in cPanel; the .env wins over any that are set)
+//   cpanel-env-build/, water-exchange-cpanel-env.zip and water-exchange-cpanel-env.tar.gz
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,10 +26,17 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-const npmMode = args.includes('--npm');
+const withEnv = args.includes('--env');
+const npmMode = withEnv || args.includes('--npm');
 const siteUrl = (args.find((a) => !a.startsWith('--')) || 'https://waterexchangebd.com').replace(/\/+$/, '');
-const out = path.join(root, npmMode ? 'cpanel-npm-build' : 'cpanel-build');
-const zip = path.join(root, npmMode ? 'water-exchange-cpanel-npm.tar.gz' : 'water-exchange-cpanel.tar.gz');
+const name = withEnv ? 'cpanel-env' : npmMode ? 'cpanel-npm' : 'cpanel';
+const out = path.join(root, `${name}-build`);
+const zip = path.join(root, `water-exchange-${name}.tar.gz`);
+
+// Settings the site cannot run without (DB_HOST defaults to localhost, DB_PASSWORD may be empty)
+const REQUIRED_ENV = ['DB_USER', 'DB_NAME', 'JWT_SECRET', 'SETTINGS_SECRET', 'CRON_SECRET'];
+// One-time data from MongoDB (npm run export-mongo) — imported into the empty MariaDB tables on first start
+const exportFile = path.join(root, 'mongo-export.json');
 
 const step = (msg) => console.log(`\n▸ ${msg}`);
 const copy = (from, to) => fs.cpSync(from, to, { recursive: true, dereference: true });
@@ -46,7 +57,7 @@ function readEnv(file) {
 }
 
 const env = readEnv(path.join(root, '.env'));
-for (const key of npmMode ? [] : ['MONGO_URI', 'JWT_SECRET', 'SETTINGS_SECRET', 'CRON_SECRET']) {
+for (const key of npmMode && !withEnv ? [] : REQUIRED_ENV) {
   if (!env[key]) {
     console.error(`✖ ${key} is missing in .env — add it before building.`);
     process.exit(1);
@@ -105,7 +116,7 @@ require('./site/server.js');
 );
 
 // Database connection checker — run in cPanel → Terminal: node check-db.js
-fs.writeFileSync(path.join(out, 'check-db.js'), checkDbSource('./site/node_modules/mongoose'));
+fs.writeFileSync(path.join(out, 'check-db.js'), checkDbSource('./site/node_modules/mysql2/promise'));
 
 // app.js is CommonJS; no dependencies are listed, so cPanel's "Run NPM Install" has nothing to do
 fs.writeFileSync(
@@ -113,23 +124,32 @@ fs.writeFileSync(
   `${JSON.stringify({ name: 'water-exchange', private: true, type: 'commonjs', main: 'app.js', scripts: { start: 'node app.js' }, engines: { node: '>=20.9.0' } }, null, 2)}\n`
 );
 
-fs.writeFileSync(
-  path.join(out, '.env'),
-  [
-    '# Production settings for cPanel — keep this file private.',
-    `MONGO_URI=${env.MONGO_URI}`,
-    `JWT_SECRET=${env.JWT_SECRET}`,
-    `JWT_EXPIRES_IN=${env.JWT_EXPIRES_IN || '7d'}`,
-    '# Encrypts the SMTP password saved in Settings — do not change it, or re-enter the password after changing',
-    `SETTINGS_SECRET=${env.SETTINGS_SECRET}`,
-    '# Key for the daily report cron job (/api/cron/reports?key=…)',
-    `CRON_SECRET=${env.CRON_SECRET}`,
-    `NEXT_PUBLIC_SITE_URL=${siteUrl}`,
-    '',
-  ].join('\n')
-);
+writeEnvFile();
 
 finish(['app.js', 'check-db.js', 'package.json', '.env', 'site']);
+
+function writeEnvFile() {
+  fs.writeFileSync(
+    path.join(out, '.env'),
+    [
+      '# Production settings for cPanel — keep this file private.',
+      '# MariaDB (cPanel → MySQL Databases); the site runs on the same server, so the host is localhost',
+      `DB_HOST=${env.DB_HOST || 'localhost'}`,
+      `DB_PORT=${env.DB_PORT || '3306'}`,
+      `DB_USER=${env.DB_USER}`,
+      `DB_PASSWORD="${env.DB_PASSWORD || ''}"`,
+      `DB_NAME=${env.DB_NAME}`,
+      `JWT_SECRET=${env.JWT_SECRET}`,
+      `JWT_EXPIRES_IN=${env.JWT_EXPIRES_IN || '7d'}`,
+      '# Encrypts the SMTP password saved in Settings — do not change it, or re-enter the password after changing',
+      `SETTINGS_SECRET=${env.SETTINGS_SECRET}`,
+      '# Key for the daily report cron job (/api/cron/reports?key=…)',
+      `CRON_SECRET=${env.CRON_SECRET}`,
+      `NEXT_PUBLIC_SITE_URL=${siteUrl}`,
+      '',
+    ].join('\n')
+  );
+}
 
 // Plain .next build + package.json with the real dependencies — cPanel's "Run NPM Install" fills node_modules
 function buildNpmPackage() {
@@ -180,12 +200,22 @@ function buildNpmPackage() {
   );
   // Same package versions as on this computer (npm drops the devDependencies from it on install)
   copy(path.join(root, 'package-lock.json'), path.join(out, 'package-lock.json'));
+  // Shared hosting caps open connections, so npm's parallel downloads get cut off (ECONNRESET) — fewer
+  // sockets and patient retries. cPanel's "Run NPM Install" reads this file from the app root.
+  fs.writeFileSync(
+    path.join(out, '.npmrc'),
+    ['maxsockets=2', 'fetch-retries=6', 'fetch-retry-mintimeout=20000', 'fetch-retry-maxtimeout=120000', 'fetch-timeout=600000', 'omit=dev', 'audit=false', 'fund=false', 'update-notifier=false', ''].join('\n')
+  );
 
   fs.writeFileSync(
     path.join(out, 'app.js'),
     `// cPanel / Passenger startup file — starts the Next.js server from ./.next
-// Settings (MONGO_URI, JWT_SECRET, …) come from Setup Node.js App → Environment variables; a .env file next
-// to this one is read too, without overriding those.
+${
+      withEnv
+        ? `// Settings come from the .env next to this file; they win over Setup Node.js App → Environment variables`
+        : `// Settings (DB_USER, JWT_SECRET, …) come from Setup Node.js App → Environment variables; a .env file next
+// to this one is read too, without overriding those.`
+    }
 const fs = require('node:fs');
 const path = require('node:path');
 const { createServer } = require('node:http');
@@ -194,16 +224,18 @@ const envFile = path.join(__dirname, '.env');
 if (fs.existsSync(envFile))
   for (const line of fs.readFileSync(envFile, 'utf8').split(/\\r?\\n/)) {
     const m = line.match(/^\\s*([A-Z0-9_]+)\\s*=\\s*(.*)\\s*$/);
-    if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^(['"])(.*)\\1$/, '$2');
+    if (m${withEnv ? '' : ' && process.env[m[1]] === undefined'}) process.env[m[1]] = m[2].replace(/^(['"])(.*)\\1$/, '$2');
   }
 process.env.NODE_ENV = 'production';
 process.env.NEXT_OUTPUT = 'default';
 // Dashboard uploads live next to app.js, outside .next, so replacing .next on an update keeps them
 process.env.UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 fs.mkdirSync(process.env.UPLOAD_DIR, { recursive: true });
+// Data from the old MongoDB database, imported once into the empty tables (then renamed .imported-…)
+process.env.DATA_IMPORT_FILE = path.join(__dirname, 'mongo-export.json');
 
-for (const key of ['MONGO_URI', 'JWT_SECRET', 'SETTINGS_SECRET', 'CRON_SECRET'])
-  if (!process.env[key]) console.error('✖ ' + key + ' is not set — add it in Setup Node.js App → Environment variables');
+for (const key of ${JSON.stringify(REQUIRED_ENV)})
+  if (!process.env[key]) console.error('✖ ' + key + ' is not set — add it to .env or Setup Node.js App → Environment variables');
 
 const next = require('next');
 const app = next({ dev: false, dir: __dirname });
@@ -219,9 +251,25 @@ app
   });
 `
   );
-  fs.writeFileSync(path.join(out, 'check-db.js'), checkDbSource('mongoose'));
+  fs.writeFileSync(path.join(out, 'check-db.js'), checkDbSource('mysql2/promise'));
+  if (withEnv) writeEnvFile();
+  // --no-data once the MongoDB data is already in MariaDB (the file holds password hashes)
+  const withData = !args.includes('--no-data') && fs.existsSync(exportFile);
+  if (withData) copy(exportFile, path.join(out, 'mongo-export.json'));
 
-  finish(['app.js', 'check-db.js', 'package.json', 'package-lock.json', 'next.config.mjs', ...(fs.existsSync(path.join(out, 'src')) ? ['src'] : []), 'public', '.next']);
+  finish([
+    'app.js',
+    'check-db.js',
+    'package.json',
+    'package-lock.json',
+    '.npmrc',
+    ...(withEnv ? ['.env'] : []),
+    ...(withData ? ['mongo-export.json'] : []),
+    'next.config.mjs',
+    ...(fs.existsSync(path.join(out, 'src')) ? ['src'] : []),
+    'public',
+    '.next',
+  ]);
 }
 
 function finish(entries) {
@@ -243,6 +291,12 @@ function finish(entries) {
     // Windows' own bsdtar (Git's GNU tar reads "F:" as a remote host); cPanel File Manager extracts .tar.gz
     const tar = process.platform === 'win32' ? `"${path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')}"` : 'tar';
     execSync(`${tar} -czf "${path.relative(out, zip)}" ${entries.join(' ')}`, { cwd: out, stdio: 'inherit' });
+    // A .zip as well — upload the .tar.gz instead if the host's scanner rejects it
+    if (npmMode) {
+      const asZip = zip.replace(/\.tar\.gz$/, '.zip');
+      fs.rmSync(asZip, { force: true });
+      execSync(`${tar} -a -cf "${path.relative(out, asZip)}" ${entries.join(' ')}`, { cwd: out, stdio: 'inherit' });
+    }
   } catch {
     console.warn(`⚠ Could not create the archive — upload the ${path.basename(out)} folder contents instead.`);
   }
@@ -262,67 +316,46 @@ function finish(entries) {
   console.log('  Next: follow DEPLOY-CPANEL.md');
 }
 
-function checkDbSource(mongoosePath) {
-  return `// Checks that this server can reach MongoDB Atlas. In cPanel → Terminal:
-//   cd ~/waterexchange && node check-db.js
+function checkDbSource(mysqlPath) {
+  return `// Checks that the website can sign in to its MariaDB database. In cPanel → Terminal, inside the app folder:
+//   node check-db.js
 const fs = require('node:fs');
 const path = require('node:path');
-const dns = require('node:dns').promises;
-const net = require('node:net');
 
 const envFile = path.join(__dirname, '.env');
-if (fs.existsSync(envFile) && typeof process.loadEnvFile === 'function') process.loadEnvFile(envFile);
-const uri = process.env.MONGO_URI;
-if (!uri) {
-  console.log('✖ MONGO_URI is not set. Add it in Setup Node.js App → Environment variables (or .env), then run:');
-  console.log('  MONGO_URI="…" node check-db.js');
+if (fs.existsSync(envFile))
+  for (const line of fs.readFileSync(envFile, 'utf8').split(/\\r?\\n/)) {
+    const m = line.match(/^\\s*([A-Z0-9_]+)\\s*=\\s*(.*)\\s*$/);
+    if (m) process.env[m[1]] = m[2].replace(/^(['"])(.*)\\1$/, '$2');
+  }
+const { DB_HOST = 'localhost', DB_PORT = '3306', DB_USER, DB_PASSWORD = '', DB_NAME } = process.env;
+if (!DB_USER || !DB_NAME) {
+  console.log('✖ DB_USER / DB_NAME are not set — add them to .env (or Setup Node.js App → Environment variables).');
   process.exit(1);
 }
-const host = new URL(uri.replace(/^mongodb\\+srv:/, 'http:')).hostname;
-
-const tcp = (h, port) =>
-  new Promise((resolve) => {
-    const s = net.connect({ host: h, port, timeout: 8000 });
-    s.on('connect', () => (s.destroy(), resolve('open')));
-    s.on('timeout', () => (s.destroy(), resolve('TIMEOUT')));
-    s.on('error', (e) => resolve(e.code));
-  });
 
 (async () => {
+  const mysql = require('${mysqlPath}');
+  let conn;
   try {
-    const ip = await fetch('https://api.ipify.org').then((r) => r.text());
-    console.log('This server connects from IP:', ip, '→ this IP (or 0.0.0.0/0) must be in Atlas → Network Access');
-  } catch {
-    console.log('(could not look up this server\\'s public IP)');
-  }
-  let hosts = [host];
-  try {
-    hosts = (await dns.resolveSrv('_mongodb._tcp.' + host)).map((r) => r.name);
-    console.log('✔ DNS ok —', hosts.length, 'Atlas servers found');
+    conn = await mysql.createConnection({ host: DB_HOST, port: Number(DB_PORT), user: DB_USER, password: DB_PASSWORD, database: DB_NAME, connectTimeout: 10000 });
+    const [[row]] = await conn.query('SELECT VERSION() AS version, CURRENT_USER() AS user');
+    const [tables] = await conn.query('SHOW TABLES');
+    console.log('✔ Signed in as', row.user, '—', row.version);
+    console.log('  ' + tables.length + ' table(s) in ' + DB_NAME + (tables.length ? '' : ' (the website creates them on its first start)'));
+    for (const t of tables) {
+      const name = Object.values(t)[0];
+      const [[{ n }]] = await conn.query('SELECT COUNT(*) AS n FROM \`' + name + '\`');
+      console.log('   ', name + ':', n);
+    }
   } catch (e) {
-    console.log('✖ DNS lookup of', host, 'failed:', e.code, '— the host blocks DNS SRV lookups; ask them to allow it');
-  }
-  let open = 0;
-  for (const h of hosts) {
-    const r = await tcp(h, 27017);
-    if (r === 'open') open += 1;
-    console.log(r === 'open' ? '✔' : '✖', h + ':27017', r);
-  }
-  if (!open) {
-    console.log('\\n✖ Port 27017 is blocked from this server. Ask your hosting support:');
-    console.log('  "Please allow outgoing TCP connections on port 27017 to *.mongodb.net (MongoDB Atlas) for my account."');
+    console.log('✖', e.code || '', e.message);
+    if (e.code === 'ER_ACCESS_DENIED_ERROR') console.log('  → wrong DB_USER / DB_PASSWORD (cPanel → MySQL Databases)');
+    if (e.code === 'ER_DBACCESS_DENIED_ERROR') console.log('  → add the user to the database: MySQL Databases → Add User To Database → ALL PRIVILEGES');
+    if (e.code === 'ER_BAD_DB_ERROR') console.log('  → DB_NAME does not exist (cPanel → MySQL Databases)');
     process.exit(1);
-  }
-  try {
-    const mongoose = require('${mongoosePath}');
-    await mongoose.connect(uri, { serverSelectionTimeoutMS: 15000 });
-    console.log('\\n✔ Connected to MongoDB — the website can reach the database. Restart the app in Setup Node.js App.');
-    await mongoose.disconnect();
-  } catch (e) {
-    const reasons = [...(e?.reason?.servers?.values?.() || [])].map((s) => s.error?.message).filter(Boolean);
-    console.log('\\n✖ Port is open but connecting failed:', reasons[0] || e.message);
-    if (/auth/i.test(reasons[0] || e.message)) console.log('  → the username or password in MONGO_URI is wrong (Atlas → Database Access)');
-    process.exit(1);
+  } finally {
+    await conn?.end().catch(() => {});
   }
 })();
 `;

@@ -5,7 +5,7 @@ import ActivityLog from '@/models/ActivityLog';
 import User from '@/models/User';
 import { getClientIp } from '@/lib/visitor';
 import { parseUserAgent } from '@/lib/user-agent';
-import { escapeRegex } from '@/lib/utils';
+import { contains, q } from '@/lib/table';
 import { str, toPlain } from '@/server/validate';
 
 // Where the request came from — IP, country/city (Vercel headers) and the device
@@ -28,10 +28,22 @@ function requestContext(req) {
 
 // ---------- recording ----------
 
+// Logs are kept for 180 days; old rows are cleared at most once an hour per server process
+const KEEP_DAYS = 180;
+let prunedAt = 0;
+function pruneOldLogs() {
+  if (Date.now() - prunedAt < 60 * 60 * 1000) return;
+  prunedAt = Date.now();
+  const before = [new Date(Date.now() - KEEP_DAYS * 86400000)];
+  Promise.all([LoginLog.deleteWhere('`createdAt` < ?', before), ActivityLog.deleteWhere('`createdAt` < ?', before)]).catch((error) =>
+    console.error('Log cleanup failed:', error.message)
+  );
+}
+
 export async function recordLogin(req, { email, success, reason = '', user }) {
   try {
-    const account = user || (email ? await User.findOne({ email: str(email, 160).toLowerCase() }).select('name role').lean() : null);
-    await LoginLog.create({
+    const account = user || (email ? await User.findOne({ email: str(email, 160).toLowerCase() }, [], { columns: ['name', 'role'] }) : null);
+    await LoginLog.insert({
       ...requestContext(req),
       email: str(email, 160).toLowerCase(),
       success,
@@ -41,13 +53,14 @@ export async function recordLogin(req, { email, success, reason = '', user }) {
   } catch (error) {
     console.error('Login log failed:', error.message);
   }
+  pruneOldLogs();
 }
 
 export async function recordActivity(req, { session, user, action, entity = '', entityId = '', summary = '' }) {
   try {
     const actor = user || session;
     const { userAgent, city, ...ctx } = requestContext(req);
-    await ActivityLog.create({
+    await ActivityLog.insert({
       ...ctx,
       user: actor?._id,
       name: actor?.name || '',
@@ -104,54 +117,64 @@ export function describeChange(method, path, data) {
 
 const since = (days) => (Number(days) > 0 ? new Date(Date.now() - Number(days) * 86400000) : null);
 
-export async function listLogins({ result, role, search, days } = {}) {
-  const filter = {};
-  if (result === 'success') filter.success = true;
-  if (result === 'failed') filter.success = false;
-  if (role) filter.role = role;
-  const from = since(days);
-  if (from) filter.createdAt = { $gte: from };
-  if (search) {
-    const re = new RegExp(escapeRegex(search), 'i');
-    filter.$or = [{ email: re }, { name: re }, { ip: re }, { country: re }, { browser: re }];
+// Adds the shared filters to conds/params and returns [where, params]
+function filters({ role, days, search, searchColumns }, conds = [], params = []) {
+  if (role) {
+    conds.push('`role` = ?');
+    params.push(role);
   }
-  return toPlain(await LoginLog.find(filter).select('-userAgent').sort({ createdAt: -1 }).limit(1000).lean());
+  const from = since(days);
+  if (from) {
+    conds.push('`createdAt` >= ?');
+    params.push(from);
+  }
+  if (search) {
+    conds.push(`(${searchColumns.map((c) => `${q(c)} LIKE ?`).join(' OR ')})`);
+    params.push(...searchColumns.map(() => contains(search)));
+  }
+  return [conds.join(' AND '), params];
+}
+
+// Everything except the full browser string
+const LOGIN_COLUMNS = ['user', 'email', 'name', 'role', 'success', 'reason', 'ip', 'country', 'city', 'browser', 'os', 'device', 'createdAt'];
+
+export async function listLogins({ result, role, search, days } = {}) {
+  const conds = [];
+  if (result === 'success') conds.push('`success` = 1');
+  if (result === 'failed') conds.push('`success` = 0');
+  const [where, params] = filters({ role, days, search, searchColumns: ['email', 'name', 'ip', 'country', 'browser'] }, conds);
+  return toPlain(await LoginLog.find({ where, params, columns: LOGIN_COLUMNS, orderBy: { createdAt: -1 }, limit: 1000 }));
 }
 
 export async function listActivity({ action, entity, role, search, days, user } = {}) {
-  const filter = {};
-  if (action) filter.action = action;
-  if (entity) filter.entity = entity;
-  if (role) filter.role = role;
-  if (user) filter.user = user;
-  const from = since(days);
-  if (from) filter.createdAt = { $gte: from };
-  if (search) {
-    const re = new RegExp(escapeRegex(search), 'i');
-    filter.$or = [{ email: re }, { name: re }, { summary: re }, { ip: re }];
+  const conds = [];
+  const params = [];
+  for (const [col, value] of Object.entries({ action, entity, user })) {
+    if (value) {
+      conds.push(`${q(col)} = ?`);
+      params.push(value);
+    }
   }
-  return toPlain(await ActivityLog.find(filter).sort({ createdAt: -1 }).limit(1000).lean());
+  const [where] = filters({ role, days, search, searchColumns: ['email', 'name', 'summary', 'ip'] }, conds, params);
+  return toPlain(await ActivityLog.find({ where, params, orderBy: { createdAt: -1 }, limit: 1000 }));
 }
 
 export async function loginStats() {
-  const day = since(1);
-  const week = since(7);
-  const [today, failedToday, activeUsers, total] = await Promise.all([
-    LoginLog.countDocuments({ success: true, createdAt: { $gte: day } }),
-    LoginLog.countDocuments({ success: false, createdAt: { $gte: day } }),
-    LoginLog.distinct('user', { success: true, createdAt: { $gte: week } }),
-    LoginLog.estimatedDocumentCount(),
+  const day = [since(1)];
+  const [today, failedToday, activeUsers7d, total] = await Promise.all([
+    LoginLog.count('`success` = 1 AND `createdAt` >= ?', day),
+    LoginLog.count('`success` = 0 AND `createdAt` >= ?', day),
+    LoginLog.distinctCount('user', '`success` = 1 AND `createdAt` >= ?', [since(7)]),
+    LoginLog.count(),
   ]);
-  return { today, failedToday, activeUsers7d: activeUsers.length, total };
+  return { today, failedToday, activeUsers7d, total };
 }
 
 export async function activityStats() {
-  const day = since(1);
-  const week = since(7);
-  const [today, activeUsers, byAction] = await Promise.all([
-    ActivityLog.countDocuments({ createdAt: { $gte: day } }),
-    ActivityLog.distinct('user', { createdAt: { $gte: week } }),
-    ActivityLog.aggregate([{ $match: { createdAt: { $gte: since(30) } } }, { $group: { _id: '$action', count: { $sum: 1 } } }]),
+  const [today, activeUsers7d, byAction] = await Promise.all([
+    ActivityLog.count('`createdAt` >= ?', [since(1)]),
+    ActivityLog.distinctCount('user', '`createdAt` >= ?', [since(7)]),
+    ActivityLog.countBy('action', '`createdAt` >= ?', [since(30)]),
   ]);
-  return { today, activeUsers7d: activeUsers.length, last30d: Object.fromEntries(byAction.map((r) => [r._id, r.count])) };
+  return { today, activeUsers7d, last30d: Object.fromEntries(byAction.map((r) => [r._id, r.count])) };
 }

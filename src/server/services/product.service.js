@@ -1,12 +1,11 @@
 // Products — read by the public pages (server components) and managed from Dashboard → Products.
-import connectDB from '@/lib/db';
 import Product from '@/models/Product';
 import { listCategories } from '@/server/services/category.service';
 import { categoryInfo } from '@/data/product-categories';
 import { HttpError } from '@/server/http';
 import { str, bool, num, strList, pairList, slugify, imageUrl, toPlain } from '@/server/validate';
 
-const CARD_FIELDS = 'slug name category image brand origin summary highlights order';
+const CARD_FIELDS = ['slug', 'name', 'category', 'image', 'brand', 'origin', 'summary', 'highlights', 'order'];
 
 // Request body → validated product fields (create and update both send the whole product)
 async function clean(body) {
@@ -43,19 +42,18 @@ async function clean(body) {
 const withCategory = (list) => (product) => ({ ...product, categoryInfo: categoryInfo(list, product.category) });
 
 export async function listProducts({ includeDrafts = false, full = false } = {}) {
-  await connectDB();
-  const filter = includeDrafts ? {} : { published: true };
-  const query = Product.find(filter).sort({ order: 1, createdAt: 1 });
-  if (!full) query.select(includeDrafts ? `${CARD_FIELDS} published updatedAt` : CARD_FIELDS);
-  const [products, categories] = await Promise.all([query.lean(), listCategories()]);
+  const columns = full ? undefined : includeDrafts ? [...CARD_FIELDS, 'published', 'updatedAt'] : CARD_FIELDS;
+  const [products, categories] = await Promise.all([
+    Product.find({ where: includeDrafts ? null : { published: true }, orderBy: { order: 1, createdAt: 1 }, columns }),
+    listCategories(),
+  ]);
   return toPlain(products).map(withCategory(categories));
 }
 
 export async function getProductBySlug(slug, { includeDrafts = false } = {}) {
   if (!slug || typeof slug !== 'string') return null;
-  await connectDB();
   const [product, categories] = await Promise.all([
-    Product.findOne({ slug: slug.toLowerCase(), ...(!includeDrafts && { published: true }) }).lean(),
+    Product.findOne({ slug: slug.toLowerCase(), ...(!includeDrafts && { published: true }) }),
     listCategories(),
   ]);
   return product ? withCategory(categories)(toPlain(product)) : null;
@@ -76,27 +74,23 @@ export async function relatedProducts(product, limit = 3) {
 // ---------- admin ----------
 
 export async function getProduct(id) {
-  await connectDB();
-  const product = await Product.findById(id).lean();
+  const product = await Product.findById(id);
   if (!product) throw new HttpError(404, 'Product not found.');
   return toPlain(product);
 }
 
 export async function createProduct(body) {
-  await connectDB();
-  return toPlain(await Product.create(await clean(body)));
+  return toPlain(await Product.insert(await clean(body)));
 }
 
 export async function updateProduct(id, body) {
-  await connectDB();
-  const product = await Product.findByIdAndUpdate(id, await clean(body), { new: true, runValidators: true }).lean();
+  const product = await Product.updateById(id, await clean(body));
   if (!product) throw new HttpError(404, 'Product not found.');
   return toPlain(product);
 }
 
 export async function deleteProduct(id) {
-  await connectDB();
-  const product = await Product.findByIdAndDelete(id).select('name').lean();
+  const product = await Product.deleteById(id);
   if (!product) throw new HttpError(404, 'Product not found.');
   return toPlain(product);
 }

@@ -1,5 +1,4 @@
 // Team members — read by "Meet the team" (home, /about), managed from Dashboard → Team.
-import connectDB from '@/lib/db';
 import TeamMember from '@/models/TeamMember';
 import { HttpError } from '@/server/http';
 import { str, bool, num, imageUrl, toPlain } from '@/server/validate';
@@ -21,42 +20,37 @@ function clean(body) {
 }
 
 export async function listTeam({ includeDrafts = false } = {}) {
-  await connectDB();
-  const members = await TeamMember.find(includeDrafts ? {} : { published: true }).sort({ featured: -1, order: 1, createdAt: 1 }).lean();
+  const members = await TeamMember.find({ where: includeDrafts ? null : { published: true }, orderBy: { featured: -1, order: 1, createdAt: 1 } });
   return toPlain(members);
 }
 
 export async function getMember(id) {
-  await connectDB();
-  const member = await TeamMember.findById(id).lean();
+  const member = await TeamMember.findById(id);
   if (!member) throw new HttpError(404, 'Team member not found.');
   return toPlain(member);
 }
 
 // Only one featured member (the large card): featuring someone un-features the rest
 async function keepOneFeatured(data, id) {
-  if (data.featured) await TeamMember.updateMany({ featured: true, ...(id && { _id: { $ne: id } }) }, { featured: false });
+  if (data.featured) await TeamMember.updateWhere('`featured` = 1 AND `id` <> ?', [id || ''], { featured: false });
 }
 
 export async function createMember(body) {
-  await connectDB();
   const data = clean(body);
   await keepOneFeatured(data);
-  return toPlain(await TeamMember.create(data));
+  return toPlain(await TeamMember.insert(data));
 }
 
 export async function updateMember(id, body) {
-  await connectDB();
   const data = clean(body);
   await keepOneFeatured(data, id);
-  const member = await TeamMember.findByIdAndUpdate(id, data, { new: true, runValidators: true }).lean();
+  const member = await TeamMember.updateById(id, data);
   if (!member) throw new HttpError(404, 'Team member not found.');
   return toPlain(member);
 }
 
 export async function deleteMember(id) {
-  await connectDB();
-  const member = await TeamMember.findByIdAndDelete(id).select('name').lean();
+  const member = await TeamMember.deleteById(id);
   if (!member) throw new HttpError(404, 'Team member not found.');
   return toPlain(member);
 }

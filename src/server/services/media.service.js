@@ -5,7 +5,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import connectDB from '@/lib/db';
 import Media from '@/models/Media';
 import Product from '@/models/Product';
 import BlogPost from '@/models/BlogPost';
@@ -13,7 +12,7 @@ import TeamMember from '@/models/TeamMember';
 import Client from '@/models/Client';
 import Setting from '@/models/Setting';
 import { HttpError } from '@/server/http';
-import { escapeRegex } from '@/lib/utils';
+import { contains } from '@/lib/table';
 import { slugify, toPlain } from '@/server/validate';
 
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -80,9 +79,8 @@ export async function saveUpload(file, { userId } = {}) {
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, buf, { flag: 'wx' }); // never overwrite an existing file
 
-  await connectDB();
   try {
-    const media = await Media.create({ url: `/uploads/${rel}`, file: rel, name: String(file.name || '').slice(0, 200), type, size: buf.length, ...dimensions(buf, type), uploadedBy: userId });
+    const media = await Media.insert({ url: `/uploads/${rel}`, file: rel, name: String(file.name || '').slice(0, 200), type, size: buf.length, ...dimensions(buf, type), uploadedBy: userId });
     return toPlain(media);
   } catch (error) {
     await fs.unlink(abs).catch(() => {}); // keep disk and database in step
@@ -92,21 +90,20 @@ export async function saveUpload(file, { userId } = {}) {
 
 // ?search=&page=&limit=
 export async function listMedia({ search = '', page = 1, limit = 40, skip = 0 } = {}) {
-  await connectDB();
-  const filter = search ? { name: new RegExp(escapeRegex(search), 'i') } : {};
-  const [rows, total] = await Promise.all([Media.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Media.countDocuments(filter)]);
+  const where = search ? '`name` LIKE ?' : '';
+  const params = search ? [contains(search)] : [];
+  const [rows, total] = await Promise.all([Media.find({ where, params, orderBy: { createdAt: -1 }, offset: skip, limit }), Media.count(where, params)]);
   return { rows: toPlain(rows), total, page, pageCount: Math.max(1, Math.ceil(total / limit)) };
 }
 
 // Where an image URL is used — shown before deleting it
 export async function findUsage(url) {
-  await connectDB();
   const [products, posts, team, clients, settings] = await Promise.all([
-    Product.find({ image: url }).select('name').lean(),
-    BlogPost.find({ coverImage: url }).select('title').lean(),
-    TeamMember.find({ photo: url }).select('name').lean(),
-    Client.find({ logo: url }).select('name').lean(),
-    Setting.find({ 'value.ogImage': url }).select('key').lean(),
+    Product.find({ where: { image: url }, columns: ['name'] }),
+    BlogPost.find({ where: { coverImage: url }, columns: ['title'] }),
+    TeamMember.find({ where: { photo: url }, columns: ['name'] }),
+    Client.find({ where: { logo: url }, columns: ['name'] }),
+    Setting.find({ where: "JSON_UNQUOTE(JSON_EXTRACT(`value`, '$.ogImage')) = ?", params: [url], columns: ['key'] }),
   ]);
   return [
     ...products.map((p) => `Product “${p.name}”`),
@@ -118,14 +115,13 @@ export async function findUsage(url) {
 }
 
 export async function deleteMedia(id, { force = false } = {}) {
-  await connectDB();
-  const media = await Media.findById(id).lean();
+  const media = await Media.findById(id);
   if (!media) throw new HttpError(404, 'Image not found.');
   if (!force) {
     const usedIn = await findUsage(media.url);
     if (usedIn.length) throw new HttpError(409, `This image is still used by: ${usedIn.join(', ')}. Replace it there first, or delete anyway.`);
   }
-  await Media.deleteOne({ _id: id });
+  await Media.deleteById(id);
   await fs.unlink(path.join(/* turbopackIgnore: true */ uploadDir(), media.file)).catch(() => {}); // already gone is fine
   return toPlain({ ...media, title: media.name });
 }

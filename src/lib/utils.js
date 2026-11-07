@@ -4,10 +4,6 @@ export function cn(...classes) {
   return classes.filter(Boolean).join(' ');
 }
 
-export function escapeRegex(value = '') {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 // Date (and optional time) in the site timezone set in Dashboard → Settings
 export function formatDate(value, withTime = false) {
   if (!value) return '—';

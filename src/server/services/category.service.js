@@ -1,6 +1,5 @@
 // Product categories (Dashboard → Product Categories). The whole tree is small, so it is read in one
 // query and cached briefly — public pages read it on every request.
-import connectDB from '@/lib/db';
 import ProductCategory from '@/models/ProductCategory';
 import Product from '@/models/Product';
 import { HttpError } from '@/server/http';
@@ -13,8 +12,7 @@ let cache = null;
 
 export async function listCategories({ fresh = false } = {}) {
   if (!fresh && cache && cache.expires > Date.now()) return cache.list;
-  await connectDB();
-  const list = toPlain(await ProductCategory.find().sort({ order: 1, name: 1 }).lean());
+  const list = toPlain(await ProductCategory.find({ orderBy: { order: 1, name: 1 } }));
   cache = { list, expires: Date.now() + CACHE_MS };
   return list;
 }
@@ -25,10 +23,7 @@ const invalidate = () => {
 
 // Product counts per category, including everything below it (admin list)
 export async function listCategoriesWithCounts() {
-  const [list, counts] = await Promise.all([
-    listCategories({ fresh: true }),
-    Product.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
-  ]);
+  const [list, counts] = await Promise.all([listCategories({ fresh: true }), Product.countBy('category')]);
   const direct = Object.fromEntries(counts.map((c) => [c._id, c.count]));
   return list.map((c) => ({
     ...c,
@@ -71,23 +66,21 @@ async function clean(body, current) {
 
 export async function createCategory(body) {
   const data = await clean(body);
-  await connectDB();
-  const category = await ProductCategory.create(data);
+  const category = await ProductCategory.insert(data);
   invalidate();
   return toPlain(category);
 }
 
 export async function updateCategory(id, body) {
-  await connectDB();
-  const current = await ProductCategory.findById(id).lean();
+  const current = await ProductCategory.findById(id);
   if (!current) throw new HttpError(404, 'Category not found.');
   const data = await clean(body, current);
-  const category = await ProductCategory.findByIdAndUpdate(id, data, { new: true, runValidators: true }).lean();
+  const category = await ProductCategory.updateById(id, data);
   // A new slug is carried over to its sub-categories and products
   if (data.slug !== current.slug) {
     await Promise.all([
-      ProductCategory.updateMany({ parent: current.slug }, { parent: data.slug }),
-      Product.updateMany({ category: current.slug }, { category: data.slug }),
+      ProductCategory.updateWhere({ parent: current.slug }, [], { parent: data.slug }),
+      Product.updateWhere({ category: current.slug }, [], { category: data.slug }),
     ]);
   }
   invalidate();
@@ -95,13 +88,12 @@ export async function updateCategory(id, body) {
 }
 
 export async function deleteCategory(id) {
-  await connectDB();
-  const category = await ProductCategory.findById(id).lean();
+  const category = await ProductCategory.findById(id);
   if (!category) throw new HttpError(404, 'Category not found.');
-  const [children, products] = await Promise.all([ProductCategory.countDocuments({ parent: category.slug }), Product.countDocuments({ category: category.slug })]);
+  const [children, products] = await Promise.all([ProductCategory.count({ parent: category.slug }), Product.count({ category: category.slug })]);
   if (children) throw new HttpError(409, `Move or delete its ${children} sub-categor${children === 1 ? 'y' : 'ies'} first.`);
   if (products) throw new HttpError(409, `${products} product${products === 1 ? ' uses' : 's use'} this category — move ${products === 1 ? 'it' : 'them'} to another category first.`);
-  await ProductCategory.deleteOne({ _id: id });
+  await ProductCategory.deleteById(id);
   invalidate();
   return toPlain(category);
 }

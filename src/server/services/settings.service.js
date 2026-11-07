@@ -1,9 +1,8 @@
-// Dashboard-editable site settings (Setting model), one document per key:
+// Dashboard-editable site settings (settings table), one row per key:
 //   site  → timezone                                  (public)
 //   seo   → titles, description, keywords, social links, search-engine verification (public)
 //   email → SMTP account, admin email, notifications, reports (admins only; the password is encrypted)
-// Reads merge the stored value over DEFAULTS, so a missing document still works.
-import connectDB from '@/lib/db';
+// Reads merge the stored value over DEFAULTS, so a missing row still works.
 import Setting from '@/models/Setting';
 import { HttpError } from '@/server/http';
 import { str, bool, num, strList, imageUrl, toPlain } from '@/server/validate';
@@ -136,8 +135,7 @@ const cache = new Map();
 
 async function readRaw(key) {
   if (!KEYS.includes(key)) throw new HttpError(404, 'Unknown setting.');
-  await connectDB();
-  const doc = await Setting.findOne({ key }).lean();
+  const doc = await Setting.findOne({ key });
   return toPlain({ ...DEFAULTS[key], ...(doc?.value || {}) });
 }
 
@@ -158,9 +156,16 @@ export async function getSetting(key) {
 export async function updateSetting(key, input = {}, { userId } = {}) {
   const current = await readRaw(key);
   const value = CLEANERS[key](input, current);
-  await Setting.updateOne({ key }, { $set: { value, updatedBy: userId } }, { upsert: true });
+  await saveSetting(key, value, userId);
   cache.delete(key);
   return getSetting(key);
+}
+
+// Insert or replace one settings row
+export async function saveSetting(key, value, userId) {
+  const existing = await Setting.findOne({ key }, [], { columns: ['key'] });
+  if (existing) await Setting.updateById(existing._id, { value, updatedBy: userId });
+  else await Setting.insert({ key, value, updatedBy: userId });
 }
 
 // Server-only: the email settings with the decrypted SMTP password

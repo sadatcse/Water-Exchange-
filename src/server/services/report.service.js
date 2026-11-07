@@ -1,6 +1,6 @@
 // Weekly / monthly website reports emailed to the admin (Dashboard → Settings → Reports).
 // A daily cron job calls /api/cron/reports; each report is sent once per completed period.
-import connectDB from '@/lib/db';
+import { query } from '@/lib/db';
 import Setting from '@/models/Setting';
 import VisitorLog from '@/models/VisitorLog';
 import ContactMessage from '@/models/ContactMessage';
@@ -72,23 +72,23 @@ const countBy = (items, keyFn) => {
 
 export async function buildReport(period, { now = new Date() } = {}) {
   if (!PERIODS.includes(period)) throw new HttpError(400, 'Unknown report period.');
-  await connectDB();
   const { timezone } = await getCachedSetting('site');
   const { start, end, prevStart, key } = lastCompletePeriod(period, timezone, now);
-  const range = { $gte: start, $lt: end };
-  const prevRange = { $gte: prevStart, $lt: start };
+  const IN_RANGE = '`createdAt` >= ? AND `createdAt` < ?';
+  const range = [start, end];
+  const prevRange = [prevStart, start];
 
   const [visits, prevVisits, contacts, prevContacts, unreadNow, loginsOk, loginsFailed, newPosts, posts, products] = await Promise.all([
-    VisitorLog.find({ createdAt: range }).select('ip source sourceName referrer path country device userAgent createdAt').lean(),
-    VisitorLog.find({ createdAt: prevRange }).select('ip source').lean(),
-    ContactMessage.find({ createdAt: range }).sort({ createdAt: -1 }).select('fullName email subject message createdAt').lean(),
-    ContactMessage.countDocuments({ createdAt: prevRange }),
-    ContactMessage.countDocuments({ status: 'unread' }),
-    LoginLog.countDocuments({ createdAt: range, success: true }),
-    LoginLog.countDocuments({ createdAt: range, success: false }),
-    BlogPost.countDocuments({ published: true, publishedAt: range }),
-    BlogPost.countDocuments({ published: true, publishedAt: { $lte: now } }),
-    Product.countDocuments({ published: true }),
+    VisitorLog.find({ where: IN_RANGE, params: range, columns: ['ip', 'source', 'sourceName', 'referrer', 'path', 'country', 'device', 'userAgent', 'createdAt'] }),
+    VisitorLog.find({ where: IN_RANGE, params: prevRange, columns: ['ip', 'source'] }),
+    ContactMessage.find({ where: IN_RANGE, params: range, orderBy: { createdAt: -1 }, columns: ['fullName', 'email', 'subject', 'message', 'createdAt'] }),
+    ContactMessage.count(IN_RANGE, prevRange),
+    ContactMessage.count({ status: 'unread' }),
+    LoginLog.count(`${IN_RANGE} AND \`success\` = 1`, range),
+    LoginLog.count(`${IN_RANGE} AND \`success\` = 0`, range),
+    BlogPost.count('`published` = 1 AND `publishedAt` >= ? AND `publishedAt` < ?', range),
+    BlogPost.count('`published` = 1 AND `publishedAt` <= ?', [now]),
+    Product.count({ published: true }),
   ]);
 
   const dayFmt = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, weekday: 'short', day: 'numeric', month: 'short' });
@@ -156,9 +156,10 @@ export async function sendReport(period) {
 // Cron: sends each enabled report once for its last completed period.
 // The period is claimed in the database first, so overlapping cron runs cannot send it twice.
 export async function sendDueReports() {
-  await connectDB();
   const cfg = await getEmailConfig();
   const { timezone } = await getCachedSetting('site');
+  // The state row must exist before it can be claimed (a unique key, so racing runs insert it once)
+  if (!(await Setting.findOne({ key: STATE_KEY }))) await Setting.insert({ key: STATE_KEY, value: {} }).catch(() => {});
   const results = [];
   for (const period of PERIODS) {
     if ((period === 'weekly' && !cfg.weeklyReport) || (period === 'monthly' && !cfg.monthlyReport)) {
@@ -166,12 +167,15 @@ export async function sendDueReports() {
       continue;
     }
     const { key } = lastCompletePeriod(period, timezone);
-    const field = `value.${period}`;
-    const before = await Setting.findOneAndUpdate({ key: STATE_KEY, [field]: { $ne: key } }, { $set: { [field]: key } }, { upsert: true }).lean().catch((e) => {
-      if (e?.code === 11000) return 'taken'; // another run claimed it at the same moment
-      throw e;
-    });
-    if (before === 'taken' || (before && before.value?.[period] === key)) {
+    const before = (await reportState())[period];
+    const field = `'$.${period}'`; // period is one of PERIODS
+    // Only one run can change the stored key from something else to this period's key
+    const claimed = await query(
+      `UPDATE \`settings\` SET \`value\` = JSON_SET(COALESCE(\`value\`, '{}'), ${field}, ?), \`updatedAt\` = ?
+       WHERE \`key\` = ? AND (JSON_EXTRACT(\`value\`, ${field}) IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(\`value\`, ${field})) <> ?)`,
+      [key, new Date(), STATE_KEY, key]
+    );
+    if (!claimed.affectedRows) {
       results.push({ period, status: 'already sent', key });
       continue;
     }
@@ -180,7 +184,12 @@ export async function sendDueReports() {
       results.push({ ...sent, status: 'sent' });
     } catch (error) {
       // Release the claim so the next cron run tries again
-      await Setting.updateOne({ key: STATE_KEY }, before?.value?.[period] ? { $set: { [field]: before.value[period] } } : { $unset: { [field]: '' } });
+      await query(
+        before
+          ? `UPDATE \`settings\` SET \`value\` = JSON_SET(\`value\`, ${field}, ?) WHERE \`key\` = ?`
+          : `UPDATE \`settings\` SET \`value\` = JSON_REMOVE(\`value\`, ${field}) WHERE \`key\` = ?`,
+        before ? [before, STATE_KEY] : [STATE_KEY]
+      );
       results.push({ period, status: 'failed', key, error: error.message });
     }
   }
@@ -188,6 +197,5 @@ export async function sendDueReports() {
 }
 
 export async function reportState() {
-  await connectDB();
-  return (await Setting.findOne({ key: STATE_KEY }).lean())?.value || {};
+  return (await Setting.findOne({ key: STATE_KEY }))?.value || {};
 }

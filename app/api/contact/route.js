@@ -1,5 +1,4 @@
 import { NextResponse, after } from 'next/server';
-import connectDB from '@/lib/db';
 import ContactMessage from '@/models/ContactMessage';
 import { findRecentDuplicate } from '@/lib/dedupe-guard';
 import { getClientIp } from '@/lib/visitor';
@@ -34,15 +33,14 @@ export async function POST(req) {
       return NextResponse.json({ success: false, message: 'Name, a valid email and a message are required.' }, { status: 400 });
     }
 
-    await connectDB();
     const existing = await findRecentDuplicate(ContactMessage, { email: data.email, message: data.message });
     if (existing) {
       return NextResponse.json({ success: true, message: 'We already received your message — we will get back to you soon.' });
     }
 
-    const message = await ContactMessage.create(data);
+    const message = await ContactMessage.insert(data);
     // Email the admin once the visitor has their response
-    after(() => notifyNewContact(message.toObject()));
+    after(() => notifyNewContact(message));
     return NextResponse.json({ success: true, message: 'Thanks! Your message has been sent.' }, { status: 201 });
   } catch (error) {
     console.error('Contact POST error:', error);

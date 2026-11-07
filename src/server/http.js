@@ -4,7 +4,6 @@
 //   export const PUT = route(controller.update, { auth: true });       // any signed-in user
 // The handler receives { req, params, query, session } and returns a NextResponse.
 import { NextResponse } from 'next/server';
-import connectDB from '@/lib/db';
 import { getSession } from '@/lib/auth-guard';
 import User from '@/models/User';
 import { describeChange, recordActivity } from '@/server/services/audit.service';
@@ -50,10 +49,9 @@ export async function readJson(req) {
 
 function toResponse(error) {
   if (error instanceof HttpError) return fail(error.message, error.status);
-  if (error?.name === 'ValidationError') return fail(Object.values(error.errors)[0]?.message || 'Invalid data.', 400);
-  if (error?.name === 'CastError') return fail('Invalid id.', 400);
-  if (error?.code === 11000) {
-    const field = Object.keys(error.keyValue || {})[0] || 'value';
+  // Unique key clash, e.g. "Duplicate entry 'roots-blower' for key 'slug'"
+  if (error?.code === 'ER_DUP_ENTRY') {
+    const field = /for key '(?:[^']*.)?([^']+)'/.exec(error.sqlMessage || '')?.[1] || 'value';
     return fail(`That ${field} is already in use.`, 409);
   }
   console.error('API error:', error);
@@ -64,11 +62,10 @@ export function route(handler, { roles, auth = Boolean(roles) } = {}) {
   return async function routeHandler(req, ctx) {
     try {
       let session = getSession(req);
-      await connectDB();
       // The cookie only proves who signed in. Status and role are read fresh, so an account that is
       // suspended or removed loses access right away.
       if (session) {
-        const user = await User.findById(session._id).select('status role').lean().catch(() => null);
+        const user = await User.findById(session._id, { columns: ['status', 'role'] }).catch(() => null);
         session = user?.status === 'active' ? { ...session, role: user.role } : null;
       }
       if (auth && !session) return fail('Please sign in.', 401);

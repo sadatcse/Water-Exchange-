@@ -1,11 +1,13 @@
 // Blog posts — read by /blog, /blog/[slug] and the home page, managed from Dashboard → Blog.
-import connectDB from '@/lib/db';
 import BlogPost, { BLOG_CATEGORIES } from '@/models/BlogPost';
+import { contains } from '@/lib/table';
 import { HttpError } from '@/server/http';
-import { escapeRegex } from '@/lib/utils';
 import { str, bool, strList, slugify, imageUrl, toPlain } from '@/server/validate';
 
-const CARD_FIELDS = 'slug title excerpt category coverImage author publishedAt content';
+const CARD_FIELDS = ['slug', 'title', 'excerpt', 'category', 'coverImage', 'author', 'publishedAt', 'content'];
+const NEWEST = { publishedAt: -1 };
+// Published and not scheduled for later (one parameter: now)
+const LIVE = '`published` = 1 AND `publishedAt` <= ?';
 
 // ~200 words a minute; `content` is dropped from list results after this is worked out
 const withReadTime = ({ content = '', ...post }) => ({
@@ -41,12 +43,14 @@ function clean(body) {
 
 // Published posts, newest first. Returns { posts, total, page, pageCount, categories: [{ name, count }] }
 export async function listPublishedPosts({ category = '', page = 1, limit = 9 } = {}) {
-  await connectDB();
-  const filter = { published: true, publishedAt: { $lte: new Date() }, ...(BLOG_CATEGORIES.includes(category) && { category }) };
+  const now = new Date();
+  const byCategory = BLOG_CATEGORIES.includes(category);
+  const where = byCategory ? `${LIVE} AND \`category\` = ?` : LIVE;
+  const params = byCategory ? [now, category] : [now];
   const [posts, total, counts] = await Promise.all([
-    BlogPost.find(filter).select(CARD_FIELDS).sort({ publishedAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
-    BlogPost.countDocuments(filter),
-    BlogPost.aggregate([{ $match: { published: true, publishedAt: { $lte: new Date() } } }, { $group: { _id: '$category', count: { $sum: 1 } } }]),
+    BlogPost.find({ where, params, columns: CARD_FIELDS, orderBy: NEWEST, offset: (page - 1) * limit, limit }),
+    BlogPost.count(where, params),
+    BlogPost.countBy('category', LIVE, [now]),
   ]);
   return {
     posts: toPlain(posts).map(withReadTime),
@@ -63,8 +67,7 @@ export async function latestPosts(limit = 3) {
 
 export async function getPostBySlug(slug) {
   if (!slug || typeof slug !== 'string') return null;
-  await connectDB();
-  const post = await BlogPost.findOne({ slug: slug.toLowerCase(), published: true, publishedAt: { $lte: new Date() } }).lean();
+  const post = await BlogPost.findOne(`${LIVE} AND \`slug\` = ?`, [new Date(), slug.toLowerCase()]);
   if (!post) return null;
   const { readMinutes } = withReadTime(post);
   return { ...toPlain(post), readMinutes };
@@ -72,63 +75,60 @@ export async function getPostBySlug(slug) {
 
 // Same category first, then the newest others
 export async function relatedPosts(post, limit = 3) {
-  await connectDB();
-  const base = { published: true, publishedAt: { $lte: new Date() }, slug: { $ne: post.slug } };
-  const same = await BlogPost.find({ ...base, category: post.category }).select(CARD_FIELDS).sort({ publishedAt: -1 }).limit(limit).lean();
+  const base = `${LIVE} AND \`slug\` <> ?`;
+  const params = [new Date(), post.slug, post.category];
+  const same = await BlogPost.find({ where: `${base} AND \`category\` = ?`, params, columns: CARD_FIELDS, orderBy: NEWEST, limit });
   const more =
     same.length < limit
-      ? await BlogPost.find({ ...base, category: { $ne: post.category } }).select(CARD_FIELDS).sort({ publishedAt: -1 }).limit(limit - same.length).lean()
+      ? await BlogPost.find({ where: `${base} AND \`category\` <> ?`, params, columns: CARD_FIELDS, orderBy: NEWEST, limit: limit - same.length })
       : [];
   return toPlain([...same, ...more]).map(withReadTime);
 }
 
 export async function allPublishedSlugs() {
-  await connectDB();
-  return toPlain(await BlogPost.find({ published: true, publishedAt: { $lte: new Date() } }).select('slug updatedAt').lean());
+  return toPlain(await BlogPost.find({ where: LIVE, params: [new Date()], columns: ['slug', 'updatedAt'] }));
 }
 
 // ---------- admin ----------
 
 // ?search=&category=&status=published|draft&page=&limit=
 export async function listPostsAdmin({ search = '', category = '', status = '', page = 1, limit = 20, skip = 0 } = {}) {
-  await connectDB();
-  const filter = {};
-  if (BLOG_CATEGORIES.includes(category)) filter.category = category;
-  if (status === 'published') filter.published = true;
-  if (status === 'draft') filter.published = false;
-  if (search) {
-    const re = new RegExp(escapeRegex(search), 'i');
-    filter.$or = [{ title: re }, { excerpt: re }, { author: re }];
+  const conds = [];
+  const params = [];
+  if (BLOG_CATEGORIES.includes(category)) {
+    conds.push('`category` = ?');
+    params.push(category);
   }
-  const [rows, total] = await Promise.all([
-    BlogPost.find(filter).select('slug title category coverImage author published publishedAt updatedAt').sort({ publishedAt: -1 }).skip(skip).limit(limit).lean(),
-    BlogPost.countDocuments(filter),
-  ]);
+  if (status === 'published') conds.push('`published` = 1');
+  if (status === 'draft') conds.push('`published` = 0');
+  if (search) {
+    conds.push('(`title` LIKE ? OR `excerpt` LIKE ? OR `author` LIKE ?)');
+    params.push(...Array(3).fill(contains(search)));
+  }
+  const where = conds.join(' AND ');
+  const columns = ['slug', 'title', 'category', 'coverImage', 'author', 'published', 'publishedAt', 'updatedAt'];
+  const [rows, total] = await Promise.all([BlogPost.find({ where, params, columns, orderBy: NEWEST, offset: skip, limit }), BlogPost.count(where, params)]);
   return { rows: toPlain(rows), total, page, pageCount: Math.max(1, Math.ceil(total / limit)) };
 }
 
 export async function getPost(id) {
-  await connectDB();
-  const post = await BlogPost.findById(id).lean();
+  const post = await BlogPost.findById(id);
   if (!post) throw new HttpError(404, 'Post not found.');
   return toPlain(post);
 }
 
 export async function createPost(body) {
-  await connectDB();
-  return toPlain(await BlogPost.create(clean(body)));
+  return toPlain(await BlogPost.insert(clean(body)));
 }
 
 export async function updatePost(id, body) {
-  await connectDB();
-  const post = await BlogPost.findByIdAndUpdate(id, clean(body), { new: true, runValidators: true }).lean();
+  const post = await BlogPost.updateById(id, clean(body));
   if (!post) throw new HttpError(404, 'Post not found.');
   return toPlain(post);
 }
 
 export async function deletePost(id) {
-  await connectDB();
-  const post = await BlogPost.findByIdAndDelete(id).select('title').lean();
+  const post = await BlogPost.deleteById(id);
   if (!post) throw new HttpError(404, 'Post not found.');
   return toPlain(post);
 }
